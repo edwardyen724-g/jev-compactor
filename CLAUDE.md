@@ -46,3 +46,4 @@ pnpm typecheck && pnpm test          # unit, no network
 pnpm test:live                       # hits api.typesafe.ai, needs .env.local
 pnpm --filter jev-compactor build
 ```
+- **Commit messages carry no AI co-author trailer.** Edward is the author; do not add `Co-Authored-By` lines.
