@@ -12,9 +12,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - run: pnpm typecheck # builds packages/jev-compactor first
       - run: pnpm test
-      - run: pnpm --filter jev-compactor build
+      - run: pnpm lint
       - name: live tests (only when the repo secret is set)
         if: ${{ env.TYPESAFE_API_KEY != '' }}
         env:
