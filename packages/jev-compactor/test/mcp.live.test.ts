@@ -69,12 +69,13 @@ describe.skipIf(!HAS_KEY)('mcp server (live)', () => {
     if (serverStderr !== '') console.warn(`server stderr:\n${serverStderr}`);
   });
 
-  it('lists the three tools', async () => {
+  it('lists the four tools', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'check_action',
       'compact_context',
       'inspect_context',
+      'self_test',
     ]);
     const compactTool = tools.find((t) => t.name === 'compact_context');
     expect(compactTool?.inputSchema).toMatchObject({ type: 'object', required: ['messages'] });
