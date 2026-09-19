@@ -10,6 +10,7 @@ const { values, positionals } = parseArgs({
     runs: { type: 'string', default: '3' },
     'max-tokens': { type: 'string', default: '6000' },
     goal: { type: 'string' },
+    votes: { type: 'string', default: '1' },
   },
 });
 loadEnvLocal(new URL('..', import.meta.url).pathname);
@@ -24,6 +25,7 @@ for (let i = 0; i < n; i++) {
     await compact(messages, {
       maxTokens: Number(values['max-tokens']),
       trigger: 'always',
+      votes: Number(values.votes),
       ...(values.goal ? { goal: values.goal } : {}),
     }),
   );

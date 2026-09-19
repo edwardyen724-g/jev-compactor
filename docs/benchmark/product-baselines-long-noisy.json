@@ -1,0 +1,145 @@
+{
+  "maxTokens": 6000,
+  "mustContain": [
+    "OPS-2291",
+    "API-1187",
+    "duplicate idempotency key",
+    "migration freeze"
+  ],
+  "rows": [
+    {
+      "transcript": "long-noisy-openai.json",
+      "source": "messages-json",
+      "messages": 64,
+      "tokensBefore": 12667,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 3365,
+          "saved": 0.734349096076419,
+          "ms": 350,
+          "usd": 0.00039774000000000005,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": true,
+          "foreman": 1
+        },
+        "truncate-oldest": {
+          "tokensAfter": 5957,
+          "saved": 0.529722902028894,
+          "ms": 1,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.25
+        },
+        "ai-sdk-prune:before-last-2-messages": {
+          "tokensAfter": 1588,
+          "saved": 0.8746348780295256,
+          "ms": 1,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75
+        },
+        "claude-api-compaction:auto": {
+          "tokensAfter": 1754,
+          "saved": 0.8615299597379016,
+          "ms": 16823,
+          "usd": 0.043492,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75,
+          "summary": "Context / State:\n- Repo: orders-service (TypeScript, Express, Postgres, on branch `fix/orders-idempotency`).\n- Tickets referenced by user: **OPS-2291** (migration freeze in effect until Friday — no DB schema changes allowed) and **API-1187** (gateway team owns retry behavior; retries themselves are correct and out of scope, fix must be on our side).\n- Schema status: **untouched**. No migration files were modified. Confirmed via `git diff --stat` — only source/lint files and package.json/package-lock.json changed; `migrations/` directory not touched.\n\nWork completed so far:\n\n1. **Root cause of flaky test** (`POST /orders > is idempotent across gateway retries` failing with 409):\n   - In `src/api/orders.ts`, the handler called `idempotency.remember(key, ...)` *before* the DB transaction that inserts the order. When the gateway's first request timed out and the transaction rolled back, the idempotency key was already marked \"seen\" in the cache, so the legitimate retry got rejected with 409.\n   - Fix applied: moved the `await idempotency.remember(key, { ttlSeconds: 86_400 });` call to *inside* the `db.transaction(...)` callback, after the successful inserts (`orders` and `order_events`), so the key is only remembered once the order is actually committed. If the transaction throws/rolls back, `remember` never executes, allowing retries to succeed.\n   - Verified: `npm test -- test/orders.test.ts` now passes all 6 tests; full `npm test` suite passes (21/21 tests across orders, health, validate, reconcile).\n   - No schema/migration changes were needed or made — fix was purely application-level logic ordering.\n\n2. **Unrelated side request from user**: bump eslint to latest 9.x since lint job had been red for a week.\n   - Ran `npm install eslint@latest @eslint/js@latest --save-dev` (updated package.json/package-lock.json).\n   - Ran `npx eslint . --ext .ts`, found 23 lint errors across multiple files (unused vars, `==` vs `===`, console statements, `let` vs `const`, empty blocks) in: `test/helpers/db.ts`, `src/lib/config.ts`, `src/api/health.ts`, `src/api/validate.ts`, `src/lib/logger.ts`, `src/workers/reconcile.ts`, `src/db/client.ts`.\n   - Fixed all of them via small patches (renamed unused `res` to `result` and removed stray `console.log`, changed `let` to `const`, changed `==` to `===`). None of these files are the orders handler or idempotency module, so this was orthogonal to the flaky-test fix.\n   - Re-ran `npx eslint . --ext .ts` → \"No problems found\".\n   - Re-ran orders test suite after lint fixes to confirm nothing broke — still passing.\n\n3. **User's small personal remark** about a broken coffee machine — acknowledged briefly, no action needed.\n\nCurrent diff stat (uncommitted, not yet staged/committed as far as shown):\n```\n package-lock.json       | 212 +++++++++++++-------\n package.json            |   4 +-\n src/api/health.ts       |   4 +-\n src/api/orders.ts       |   3 +-\n src/api/validate.ts     |   6 +-\n src/db/client.ts        |   5 +-\n src/lib/config.ts       |   4 +-\n src/lib/logger.ts       |   3 +-\n src/workers/reconcile.ts|   4 +-\n test/helpers/db.ts      |   3 +-\n 10 files changed, 152 insertions(+), 96 deletions(-)\n```\n\nNext steps:\n- User just asked (last message) to be reminded of the two ticket numbers and whether schema was touched, before writing the PR summary. Need to answer: OPS-2291 (migration freeze, respected — schema untouched) and API-1187 (gateway retry ownership, not modified — only our idempotency handling logic changed).\n- After that, likely need to write the actual PR description/summary covering: (a) the idempotency ordering fix in `src/api/orders.ts` with rationale, (b) the unrelated eslint 9.x upgrade + lint fixes, referencing both tickets appropriately, and noting no migrations were touched per the freeze.\n- Have not yet committed changes (`git status` showed modifications not staged in earlier check before the eslint work — should verify current git status/diff before committing, and consider whether to split the idempotency fix and the eslint bump into separate commits/PRs for clarity, though user seems to want them together in one PR based on flow so far).\n- Should also double check `package.json`/`package-lock.json` diff is reasonable and lockfile is consistent before proposing to commit/push."
+        },
+        "codex-cli:openai/gpt-6-astra": {
+          "tokensAfter": 1949,
+          "saved": 0.8461356280097893,
+          "ms": 993,
+          "usd": 0.049385,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75
+        },
+        "gemini-cli:google/gemini-3.1-pro-preview": {
+          "tokensAfter": 4999,
+          "saved": 0.6053524907239283,
+          "ms": 16838,
+          "usd": 0.082554,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1
+        },
+        "grok-build:x-ai/grok-4.6": {
+          "tokensAfter": 3361,
+          "saved": 0.7346648772400726,
+          "ms": 468,
+          "usd": 0.019544,
+          "fidelity": 0.96,
+          "hallucinated": [
+            "query/console.log"
+          ],
+          "retention": 1
+        },
+        "opencode:claude-sonnet-5": {
+          "tokensAfter": 1957,
+          "saved": 0.845504065682482,
+          "ms": 17446,
+          "usd": 0.038148,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75
+        },
+        "langchain-summarization:claude-sonnet-5": {
+          "tokensAfter": 4265,
+          "saved": 0.6632983342543617,
+          "ms": 10403,
+          "usd": 0.012814,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.25
+        },
+        "hermes:claude-sonnet-5": {
+          "tokensAfter": 4010,
+          "saved": 0.683429383437278,
+          "ms": 24478,
+          "usd": 0.048882,
+          "fidelity": 0.9310344827586207,
+          "hallucinated": [
+            "MEMORY.md",
+            "USER.md"
+          ],
+          "retention": 1
+        },
+        "aider:claude-sonnet-5": {
+          "tokensAfter": 12682,
+          "saved": -0.0011841793637008546,
+          "ms": 0,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1
+        },
+        "goose:claude-sonnet-5": {
+          "tokensAfter": 4703,
+          "saved": 0.6287202968342938,
+          "ms": 60845,
+          "usd": 0.098904,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 403,
+          "saved": 0.968185047761901,
+          "ms": 4295,
+          "usd": 0.029886,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75,
+          "summary": "The two tickets from the original request:\n\n- **OPS-2291** — the migration freeze (in effect until Friday), which is why no schema/migration changes are allowed.\n- **API-1187** — owns the gateway retry behavior itself; confirmed correct and out of scope, so the fix had to be entirely on the orders-service side.\n\n**Schema status: untouched.** The fix only reordered when `idempotency.remember(key, ...)` is called in `src/api/orders.ts` — it now runs *after* the successful inserts inside `db.transaction(...)`, rather than before the transaction starts. No migrations were added or edited, and `git diff --stat` shows no changes under `migrations/`. The only files touched are application code (`src/api/orders.ts`, plus the unrelated ESLint 9 cleanup in `src/api/health.ts`, `src/api/validate.ts`, `src/db/client.ts`, `src/lib/config.ts`, `src/lib/logger.ts`, `src/workers/reconcile.ts`, `test/helpers/db.ts`) and `package.json`/`package-lock.json` for the eslint bump."
+        }
+      }
+    }
+  ]
+}

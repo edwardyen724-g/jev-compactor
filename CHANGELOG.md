@@ -6,6 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added
 
+- `votes` option: ask Jev every question N times in parallel and average, to stabilise units near the
+  drop threshold.
 - Wiring feedback: `status(wrapped)` with live counters and the last report, `isWrapped()`, the
   `verbose` option, `selfTest()`, `jev-compactor doctor`, and the MCP `self_test` tool.
 

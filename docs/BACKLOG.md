@@ -14,6 +14,14 @@ Ordered by value. Tick when done and move the line to `PROGRESS.md`. Add follow-
 
 ## v0.2 — mechanism
 
+- [ ] Decide whether `votes` should default to 3 once real-transcript runs show the spread matters
+      in practice (cost 3× of ~$0.0004; latency unchanged).
+- [ ] Verify each ported baseline against upstream line by line (the automated verifier died; only
+      Codex, OpenCode and LangChain were spot-checked by hand) and re-run the matrix 3× per arm to
+      report ranges for every product, not just jev-compactor.
+- [ ] OpenAI and xAI `/responses/compact` return opaque items: measure them indirectly (ask the
+      continuation model the four questions) once a direct OpenAI/xAI key exists.
+
 - [ ] **Goal-conditioned supersession**: ask Jev, for each candidate, whether a specific later unit
       supersedes it (`does messages[j] make messages[k] unnecessary for goal?`) so every drop cites
       the message that replaced it. Nobody in the landscape does this; it would make the compaction

@@ -1,0 +1,40 @@
+{
+  "maxTokens": 20000,
+  "mustContain": [
+    "OPS-2291",
+    "API-1187",
+    "duplicate idempotency key",
+    "migration freeze"
+  ],
+  "rows": [
+    {
+      "transcript": "long-noisy-openai-55k.json",
+      "source": "messages-json",
+      "messages": 289,
+      "tokensBefore": 61263,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 2847,
+          "saved": 0.9535282307428627,
+          "ms": 593,
+          "usd": 0.0013865460000000002,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": true,
+          "foreman": 2
+        },
+        "claude-api-compaction:auto": {
+          "tokensAfter": 1486,
+          "saved": 0.975743923738635,
+          "ms": 14582,
+          "usd": 0.145084,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.75,
+          "summary": "**Tickets referenced in this task:**\n- **OPS-2291**: Migration freeze in effect until Friday — no database schema changes allowed. **Confirmed: schema was NOT touched.** No files under `migrations/` were modified (verified via `git diff --stat`, which shows changes only in `src/`, `test/`, `package.json`, and `package-lock.json`).\n- **API-1187**: Owned by the gateway team, covers the gateway retry behavior itself (retrying POST /orders with the same idempotency key after a timeout). That behavior was explicitly left alone — the fix was made entirely on the orders-service side, not in the gateway/retry logic.\n\n**Root cause of the flaky test:**\nIn `src/api/orders.ts`, the `idempotency.remember(key, ...)` call happened *before* the DB transaction ran. So when the first request's transaction was rolled back (simulated gateway timeout), the idempotency key had already been persisted to the cache, causing the legitimate retry to be rejected with a 409.\n\n**Fix applied (src/api/orders.ts):**\nMoved `await idempotency.remember(key, { ttlSeconds: 86_400 });` to *inside* the `db.transaction(...)` callback, called only after both inserts (`orders`, `order_events`) succeed. This ensures the key is only remembered once the order is actually committed, so a rolled-back attempt no longer poisons the retry. No changes to `src/api/idempotency.ts` or any schema/migration files.\n\n**Verification:**\n- `npm test -- test/orders.test.ts` → all 6 tests pass, including the previously-flaky \"is idempotent across gateway retries\" test.\n- Full suite `npm test` → all 21 tests pass across 4 test files (orders, health, validate, reconcile).\n\n**Unrelated side work done during this session (per user requests, one at a time):**\nBumped several dev dependencies to latest majors/versions and fixed resulting lint errors each time (eslint config file `.eslintrc.cjs` was not changed, just source files):\n1. `eslint@latest` + `@eslint/js@latest` (9.x)\n2. `prettier@latest` (3.x)\n3. `vitest@latest` (3.x)\n4. `typescript@latest` (5.x)\n5. `tsx@latest` (4.x)\n6. `supertest@latest` (7.x)\n\nAfter each bump, ran `npx eslint . --ext .ts`, which surfaced ~23 lint errors per run in files unrelated to orders.ts: `src/db/client.ts`, `src/api/validate.ts`, `src/lib/logger.ts`, `test/helpers/db.ts`, `src/api/health.ts`, `src/lib/config.ts`, `src/workers/reconcile.ts`. Fixed each round with small patches:\n- Renamed unused `res` variables to `result` and removed stray `console.log('query', text)` calls in query helper functions (client.ts, validate.ts, logger.ts, test/helpers/db.ts).\n- Changed `let interval = 5000` → `const interval = 5000` and `status == 'ok'` → `status === 'ok'` in health.ts, config.ts, reconcile.ts.\n\nEach round ended with `npx eslint . --ext .ts` reporting \"✔ No problems found.\"\n\n**Current git status:** On branch `fix/orders-idempotency` (tracking `origin/fix/orders-idempotency`). Modified files not yet committed: `package.json`, `package-lock.json`, `src/api/health.ts`, `src/api/orders.ts`, `src/api/validate.ts`, `src/db/client.ts`, `src/lib/config.ts`, `src/lib/logger.ts`, `src/workers/reconcile.ts`, `test/helpers/db.ts`. Nothing has been committed yet.\n\n**Next step:** The user asked me to recall the two tickets and confirm schema status before writing the PR summary — I should now respond directly (in text, not via tool call) confirming:\n- OPS-2291 = migration freeze, schema untouched (true).\n- API-1187 = gateway team's retry behavior, not modified (true, only orders-service code changed).\nThen proceed to write the PR summary if requested, covering both the idempotency fix and the incidental dependency bumps/lint fixes."
+        }
+      }
+    }
+  ]
+}

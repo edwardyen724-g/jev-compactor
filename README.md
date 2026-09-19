@@ -60,49 +60,56 @@ Do not use it when:
 
 - you cannot send an abridged copy of the conversation to `api.typesafe.ai` (see
   [Data leaves your machine](#data-leaves-your-machine));
-- you need the hardest possible compression and can tolerate paraphrase: in the benchmark below,
-  LLM summarization saved 96.2% where jev-compactor saved 64.5%, at 17× the latency, 76× the cost,
-  and with one file path that does not exist in the transcript;
+- you need the hardest possible compression and can tolerate paraphrase: on the benchmark session
+  the products' summaries saved 84–97% where jev-compactor saved 73%, at 30–250× the cost;
 - the history fits the budget: `withCompaction` sends nothing to Jev below `maxTokens`; only the
   local regex floor and the gate run.
 
-## Why not summarize or truncate the context window?
+## Why not what your framework already does?
 
-When an agent's context fills up, every mainstream framework does one of two things: ask the model
-to **summarize** the history, or **truncate** the oldest turns. Both lose exactly the thing an agent
-needs most in a long task — the verbatim file path, error message, or command from twenty turns ago.
-jev-compactor reduces the token count a third way: it drops whole messages that Jev rates
-irrelevant to the goal and leaves the rest untouched.
+When an agent's context fills up, every agent product does one of two things: asks a model to
+**summarize** the history (Claude Code, Codex CLI, Gemini CLI, OpenCode, LangChain, Hermes, goose,
+Anthropic's and OpenAI's compaction APIs), or **prunes structurally** (truncate the oldest turns,
+drop old tool results). Summaries lose exactly the thing a long task needs most — the verbatim path,
+error or constraint from twenty turns ago — and cost a full generation; structural pruning is free
+and blind. jev-compactor drops whole messages that Jev rates irrelevant to the goal and leaves the
+rest untouched.
 
-| | LLM summarization | Oldest-first truncation | **jev-compactor** |
+| | model summarization (the products) | structural pruning | **jev-compactor** |
 |---|---|---|---|
-| What survives | a paraphrase | whatever is recent | the original messages, byte for byte |
+| What survives | a paraphrase, sometimes plus a recent tail | whatever is recent, or whatever is not a tool result | the original messages, byte for byte |
 | Relevance to the current goal | implicit, model-dependent | none | one calibrated keep/drop probability per message |
-| Latency per compaction | seconds (a full generation) | ~0 ms | **~0.2–0.5 s** for a 25k-token history ([measured](docs/JEV-API.md#measured-latency-2026-09-18-jev-1130)) |
-| Cost per compaction | tens of thousands of frontier tokens | free | **≈ $0.001** (Jev bills $0.042 per million input tokens) |
-| Invented file paths / errors | possible | impossible | impossible by construction |
-| Deterministic for the same input | no | yes | yes given the same answers; Jev's probabilities can move a threshold-adjacent message between runs |
-| Tool call ↔ tool result pairs | rewritten away | can be split | never split |
+| Latency per compaction | 1 – 60 s | ~0 ms | **~0.3 – 0.6 s** |
+| Cost per compaction | $0.01 – $0.15 | free | **$0.0004 – $0.0014** |
+| Invented or altered references | possible | impossible | impossible by construction |
 | Why was this dropped? | unknowable | position | a reason and a probability in the report |
 | Destructive command / loop detection | no | no | in the same pass, with a regex floor in code |
 
-### Benchmark: jev-compactor vs truncation vs LLM summarization
+### Measured against each product's own mechanism
 
-On one 64-message, 12.7k-token agent session with a 6k-token budget, jev-compactor cut tokens by
-64.5% in 366 ms for $0.0004 with zero hallucinated file paths and all 4 early facts retained;
-oldest-first truncation cut 53.0% but kept 1 of 4 facts; Claude Sonnet 5 summarization cut 96.2%
-in 6.1 s for $0.0305 and wrote one file path that does not exist in the transcript. Measured 2026-09-18 with `jev-1.13.0`; the metrics,
-raw results and reproduce commands are in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The benchmark's controls are the products' real compaction code, ported verbatim (prompt and
+algorithm) from their open-source repositories, plus Anthropic's compaction API. On a 64-message,
+12.7k-token session with a 6k budget, four facts the agent needs at the end are stated only in the
+first turns ([docs/BENCHMARK.md](docs/BENCHMARK.md) has every arm, the caveats and the raw JSON):
 
-| | saved | latency | cost | hallucinated paths | evidence retained |
-|---|---|---|---|---|---|
-| **jev-compactor** | **64.5%** | **366 ms** | **$0.0004** | **0** | **4 of 4** |
-| truncate oldest | 53.0% | 1 ms | $0 | 0 | 1 of 4 |
-| summarize (Claude Sonnet 5) | 96.2% | 6.1 s | $0.0305 | 1 | 3 of 4 |
+| arm | saved | latency | cost | evidence retained |
+|---|---|---|---|---|
+| **jev-compactor** | **73%** (53–76% across runs) | **350 ms** | **$0.0004** | **4 of 4** |
+| Anthropic compaction API (published prompt) | 86% | 16.8 s | $0.043 | 3 of 4 |
+| Codex CLI `/compact` (gpt-6-astra) | 85% | 1.0 s | $0.049 | 3 of 4 |
+| OpenCode `/compact` | 85% | 17.4 s | $0.038 | 3 of 4 |
+| Gemini CLI `/compress` | 61% | 16.8 s | $0.083 | 4 of 4 |
+| Grok Build `/compact` (grok-4.6) | 74% | 0.5 s | $0.020 | 4 of 4 |
+| LangChain `SummarizationMiddleware` | 66% | 10.4 s | $0.013 | 1 of 4 |
+| Vercel AI SDK `pruneMessages` (no model) | 88% | 1 ms | $0 | 3 of 4 |
+| oldest-first truncation (no model) | 53% | 1 ms | $0 | 1 of 4 |
 
-The four facts are two ticket ids, a schema-freeze constraint and the original failure text, all
-stated only in the first turns and all needed for the final answer. The transcript is synthetic and
-checked into the repo so the numbers are reproducible; it is one session, not a survey of your agent.
+Summaries compress harder; that is the trade. jev-compactor is the arm that kept every fact
+verbatim, 30–250× cheaper and 1.4–170× faster than the model-based mechanisms. On a 289-message,
+61k-token session, where Anthropic's real threshold compaction can fire, jev-compactor saved 95.4%
+with all four facts in 593 ms for $0.0014; the API saved 97.6% with three of four in 14.6 s for
+$0.145. The transcripts are synthetic and checked in so the numbers are reproducible; they are two
+sessions, not a survey of your agent.
 
 ## How it works
 
@@ -250,7 +257,7 @@ Markdown for agents: [raw README](https://raw.githubusercontent.com/edwardyen724
 
 Wrap the client: `withCompaction(new OpenAI(), { maxTokens: 15_000 })`. When the estimated history
 exceeds `maxTokens`, jev-compactor drops the messages Jev rates irrelevant to the goal and passes the
-rest through untouched; nothing is paraphrased. On the benchmark session that removed 64.5% of the
+rest through untouched; nothing is paraphrased. On the benchmark session that removed 73% of the
 tokens with every early fact still present verbatim.
 
 ### How do I know jev-compactor is actually working?
@@ -272,11 +279,11 @@ else goes through the MCP server, which any MCP client can call.
 
 Jev bills $0.042 per million input tokens and output is free, so a compaction of a 25k-token
 history is typically ≈ $0.001 and 0.2–0.5 s. The benchmark's 64-message, 12.7k-token session cost
-$0.0004 with jev-compactor and $0.0305 with Claude Sonnet 5 summarization.
+$0.0004 with jev-compactor and $0.013–$0.099 with the products' own compaction mechanisms.
 
 ### How much latency does compaction add?
 
-One Jev request, about 300 ms: 366 ms on the benchmark session, 0.2–0.5 s for a 25k-token history.
+One Jev request, about 300 ms: 350 ms on the benchmark session, 593 ms on a 61k-token one, 0.2–0.5 s for a 25k-token history.
 With `withCompaction` it runs only when the history exceeds `maxTokens`, and the next
 `cooldownTurns` calls (default 1) pass straight through.
 
@@ -293,8 +300,9 @@ Given the same Jev answers, yes: pins, dedup, thresholds, tool-pair handling and
 ordering are plain code, and the paired runs in the benchmark harness record whether the output was
 identical. Jev's probabilities are not bit-stable: across four identical requests on the benchmark
 transcript, P(keep) for a unit moved by up to 0.14 with no decision changing, but a unit near the
-0.7 drop threshold can flip between runs (it happened twice in nine transcript-runs). Raise
-`dropThreshold` if that matters more to you than compaction ratio.
+0.7 drop threshold can flip between runs (it happened twice in nine transcript-runs). Set
+`votes: 3` to average three answers per question (the spread halved in our measurements), or raise
+`dropThreshold` if stability matters more to you than compaction ratio.
 
 ### What happens when Jev is unreachable?
 

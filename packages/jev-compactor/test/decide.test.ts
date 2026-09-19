@@ -62,6 +62,7 @@ function opts(overrides: Partial<ResolvedOptions> = {}): ResolvedOptions {
     stateTokens: 20_000,
     requestTokens: 56_000,
     concurrency: 8,
+    votes: 1,
     safetyGating: false,
     reviewThreshold: 0.35,
     actionThreshold: 0.7,

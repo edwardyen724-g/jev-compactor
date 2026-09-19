@@ -290,6 +290,45 @@ export function collectAnswers(results: readonly SystemOneResult<Questions>[]): 
   return { units, foreman, progress };
 }
 
+/**
+ * Averages several votes — the same questions asked in separate requests. A unit's `pKeep` and
+ * `confidence` are the mean over the votes that answered it; each Foreman noul is the mean of the
+ * votes' values; `progress` is the mean of the scores seen. A single vote is returned as is.
+ */
+export function averageVotes(votes: readonly CollectedAnswers[]): CollectedAnswers {
+  const empty: Record<ForemanKind, number> = {
+    destructive: 0,
+    exfiltration: 0,
+    thrashing: 0,
+    goal_drift: 0,
+  };
+  const first = votes[0];
+  if (first === undefined) return { units: new Map(), foreman: empty, progress: undefined };
+  if (votes.length === 1) return first;
+  const sums = new Map<string, { pKeep: number; confidence: number; n: number }>();
+  for (const vote of votes) {
+    for (const [id, answer] of vote.units) {
+      const sum = sums.get(id) ?? { pKeep: 0, confidence: 0, n: 0 };
+      sum.pKeep += answer.pKeep;
+      sum.confidence += answer.confidence;
+      sum.n += 1;
+      sums.set(id, sum);
+    }
+  }
+  const units = new Map<string, { pKeep: number; confidence: number }>();
+  for (const [id, sum] of sums) {
+    units.set(id, { pKeep: sum.pKeep / sum.n, confidence: sum.confidence / sum.n });
+  }
+  const foreman = { ...empty };
+  for (const kind of Object.keys(foreman) as ForemanKind[]) {
+    foreman[kind] = votes.reduce((total, vote) => total + vote.foreman[kind], 0) / votes.length;
+  }
+  const scores = votes.map((v) => v.progress).filter((p): p is number => p !== undefined);
+  const progress =
+    scores.length === 0 ? undefined : scores.reduce((a, b) => a + b, 0) / scores.length;
+  return { units, foreman, progress };
+}
+
 // ───────────────────────────── fan-out ─────────────────────────────
 
 /**
@@ -332,6 +371,11 @@ export async function askJev(
 ): Promise<JevAnswers> {
   const batches = planBatches(skeleton, candidates, opts.requestTokens, pendingId);
   const state = asEntry(skeleton.state);
+  const votes = Math.max(1, Math.floor(opts.votes));
+  /** Every batch `votes` times: identical questions in separate requests, averaged afterwards. */
+  const runs = batches.flatMap((batch, b) =>
+    Array.from({ length: votes }, (_, vote) => ({ batch, b, vote })),
+  );
 
   // One internal controller: linked to the caller's signal, and tripped by a size rejection so the
   // remaining in-flight batches stop instead of finishing work nobody will read.
@@ -345,7 +389,7 @@ export async function askJev(
   const requestOptions: RequestOptions = { signal: controller.signal, timeout: opts.timeoutMs };
 
   const outcomes: (BatchOutcome | undefined)[] = new Array<BatchOutcome | undefined>(
-    batches.length,
+    runs.length,
   ).fill(undefined);
   const failures = new Map<number, unknown>();
   const failedIds: string[] = [];
@@ -357,8 +401,9 @@ export async function askJev(
 
   const started = Date.now();
   const runBatch = async (index: number): Promise<void> => {
-    const batch = batches[index];
-    if (batch === undefined) return;
+    const run = runs[index];
+    if (run === undefined) return;
+    const { batch } = run;
     sent += 1;
     try {
       const { data, requestId } = await client
@@ -383,12 +428,12 @@ export async function askJev(
     }
   };
   const worker = async (): Promise<void> => {
-    while (next < batches.length && !stopped()) {
+    while (next < runs.length && !stopped()) {
       const index = next++;
       await runBatch(index);
     }
   };
-  const width = Math.max(1, Math.min(Math.floor(opts.concurrency), batches.length));
+  const width = Math.max(1, Math.min(Math.floor(opts.concurrency), runs.length));
   try {
     await Promise.all(Array.from({ length: width }, worker));
   } finally {
@@ -412,12 +457,27 @@ export async function askJev(
     );
   }
   const succeeded = outcomes.filter((o): o is BatchOutcome => o !== undefined);
-  if (outcomes[0] === undefined || succeeded.length === 0) {
-    throw failures.get(0) ?? failures.values().next().value;
+  // The Foreman rides in batch 0; the run fails as a whole only when no vote of it came back.
+  const foremanAnswered = runs.some((run, index) => run.b === 0 && outcomes[index] !== undefined);
+  if (!foremanAnswered || succeeded.length === 0) {
+    const firstForeman = Math.max(
+      0,
+      runs.findIndex((run) => run.b === 0),
+    );
+    throw failures.get(firstForeman) ?? failures.values().next().value;
   }
 
   const results = succeeded.map((o) => o.result);
-  const collected = collectAnswers(results);
+  // Fold each vote's batches on their own, then average across the votes.
+  const perVote: CollectedAnswers[] = [];
+  for (let vote = 0; vote < votes; vote++) {
+    const own = runs.flatMap((run, index) => {
+      const outcome = outcomes[index];
+      return run.vote === vote && outcome !== undefined ? [outcome.result] : [];
+    });
+    if (own.length > 0) perVote.push(collectAnswers(own));
+  }
+  const collected = averageVotes(perVote);
 
   let inputTokens = 0;
   let outputTokens = 0;
@@ -425,8 +485,11 @@ export async function askJev(
     inputTokens += outcome.result.usage.input_tokens;
     outputTokens += outcome.result.usage.output_tokens;
   }
+  // A candidate no vote answered (its batch failed every time) stays unjudged, hence kept.
   let unjudged = skeleton.omitted.length;
-  for (const index of failures.keys()) unjudged += batches[index]?.candidateIds.length ?? 0;
+  for (const batch of batches) {
+    for (const id of batch.candidateIds) if (!collected.units.has(id)) unjudged += 1;
+  }
 
   const telemetry: JevTelemetry = {
     model: results[0]?.model ?? client.defaultModel,

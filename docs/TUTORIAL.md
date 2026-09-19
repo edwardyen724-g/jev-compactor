@@ -150,6 +150,7 @@ compaction. If you never see the first line, the wrapper is not in the path.
 | More recent turns untouched | `keepRecent` (default 4 units) |
 | Your tokenizer | `countTokens: (text) => number` (tiktoken, a provider's count endpoint) |
 | Run every turn | `trigger: 'always'` on the wrapper |
+| The same history compacted the same way every time | `votes: 3` — Jev's answers drift a little between identical requests; averaging three narrows it at 3× a fraction of a cent |
 
 ## 6. Turn on the safety gate
 

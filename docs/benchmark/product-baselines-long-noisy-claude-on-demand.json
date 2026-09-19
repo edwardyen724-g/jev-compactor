@@ -1,0 +1,42 @@
+{
+  "maxTokens": 6000,
+  "mustContain": [
+    "OPS-2291",
+    "API-1187",
+    "duplicate idempotency key",
+    "migration freeze"
+  ],
+  "rows": [
+    {
+      "transcript": "long-noisy-openai.json",
+      "source": "messages-json",
+      "messages": 64,
+      "tokensBefore": 12667,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 4493,
+          "saved": 0.6452988079261073,
+          "ms": 321,
+          "usd": 0.00039774000000000005,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": false,
+          "foreman": 1
+        },
+        "claude-api-compaction:on-demand": {
+          "tokensAfter": 1352,
+          "saved": 0.8932659666850873,
+          "ms": 15980,
+          "usd": 0.040542,
+          "fidelity": 0.9565217391304348,
+          "hallucinated": [
+            "rename/console.log"
+          ],
+          "retention": 0.75,
+          "summary": "**Tickets:**\n- **OPS-2291** — migration freeze in effect until Friday; confirms no DB schema/migration files were touched (verified: no changes under `migrations/` in `git diff --stat`).\n- **API-1187** — gateway team owns the retry behavior itself; the retry logic was correctly left untouched, fix was applied only on the orders-service side.\n\n**Schema status:** Untouched. `git diff --stat` shows no changes to anything in `migrations/`.\n\n**Task 1 — Fix flaky test `POST /orders > is idempotent across gateway retries` (409 on retry):**\n- Root cause: in `src/api/orders.ts`, `idempotency.remember(key, ...)` was called *before* the DB transaction ran. When the first request's transaction was rolled back (simulated gateway timeout), the idempotency key was already marked \"seen,\" so the gateway's retry with the same key got rejected with 409 even though no order was ever committed.\n- Fix applied: moved `await idempotency.remember(key, { ttlSeconds: 86_400 })` to *inside* the `db.transaction` callback, right after both inserts (`orders`, `order_events`) succeed, before returning `row`. This ties the idempotency key's \"remembered\" state to a successful commit — if the transaction throws/rolls back, the key is never remembered, so a retry can proceed normally.\n- Verified: `npm test -- test/orders.test.ts` now passes all 6 tests; full suite (`npm test`) passes all 21 tests across 4 files.\n- No changes made to `src/api/idempotency.ts` or the DB schema.\n\n**Task 2 — Bump eslint to latest 9.x (lint job red for a week):**\n- Ran `npm install eslint@latest @eslint/js@latest --save-dev` (updated `package.json`/`package-lock.json`).\n- Ran `npx eslint . --ext .ts`, found 23 errors across several unrelated files (mix of `no-unused-vars`, `prefer-const`, `eqeqeq`, `no-console`, `no-explicit-any`, `no-empty` — note: eslint 9's error messages/rule associations in the tool output looked slightly scrambled/mismatched, but fixes were applied based on the actual code content, not just the label).\n- Fixed by hand (not using `--fix`) in:\n  - `src/db/client.ts` — renamed unused `res` to `result`, removed stray `console.log`.\n  - `src/api/validate.ts` — same `res`→`result` rename/console.log removal.\n  - `src/lib/logger.ts` — same pattern.\n  - `test/helpers/db.ts` — same pattern.\n  - `src/api/health.ts` — changed `let interval` to `const interval` (never reassigned), fixed `==` to `===`.\n  - `src/lib/config.ts` — same `let`→`const` and `==`→`===` fixes.\n  - `src/workers/reconcile.ts` — same `let`→`const` and `==`→`===` fixes.\n- Final `npx eslint . --ext .ts` run: **\"No problems found\"**.\n- Full test suite still passes after these changes.\n\n**Current git state:** On branch `fix/orders-idempotency`, tracking `origin/fix/orders-idempotency`. Uncommitted changes to: `package-lock.json`, `package.json`, `src/api/health.ts`, `src/api/orders.ts`, `src/api/validate.ts`, `src/db/client.ts`, `src/lib/config.ts`, `src/lib/logger.ts`, `src/workers/reconcile.ts`, `test/helpers/db.ts`.\n\n**Next step:** User asked me to recall the ticket numbers/schema status before writing the PR summary (answered above in chat). Next action is to write the PR description covering both the idempotency fix (OPS-2291 compliance, API-1187 context) and the unrelated eslint 9.x upgrade + lint fixes, then likely commit/push."
+        }
+      }
+    }
+  ]
+}

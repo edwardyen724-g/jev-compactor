@@ -4,6 +4,14 @@
 //   - the user's constraints (ticket ids OPS-2291 / API-1187, the migration freeze)
 //   - the original failure output ("duplicate idempotency key")
 // Regenerate with: node fixtures/gen-long.mjs > fixtures/long-noisy-openai.json
+// `--scale <n>` repeats act 2 (the noise) n times with deterministic per-round variation, so the
+// same story reaches the size a real compaction API needs (Anthropic's trigger floor is 50k
+// input tokens): node fixtures/gen-long.mjs --scale 7 > fixtures/long-noisy-openai-55k.json
+// With --scale 1 (the default) the output is byte-identical to long-noisy-openai.json.
+import { parseArgs } from 'node:util';
+
+const { values } = parseArgs({ options: { scale: { type: 'string', default: '1' } } });
+const scale = Math.max(1, Number.parseInt(values.scale, 10) || 1);
 let seed = 20260918;
 const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -94,30 +102,44 @@ assistant('The handler records the idempotency key before the transaction commit
 tool('bash', { command: 'cat src/api/idempotency.ts' }, `import { cache } from '../lib/cache';\n\nexport const idempotency = {\n  async seen(key: string) {\n    return (await cache.get(\`idem:\${key}\`)) !== null;\n  },\n  async remember(key: string, opts: { ttlSeconds: number }) {\n    await cache.set(\`idem:\${key}\`, '1', opts.ttlSeconds);\n  },\n  async forget(key: string) {\n    await cache.del(\`idem:\${key}\`);\n  },\n};\n`);
 
 // ── act 2: noise — repo browsing, an unrelated lint detour, chit-chat, repeated runs ──
-tool('bash', { command: 'ls -la' }, lsOut(), 'Checking the repo layout.');
-tool('bash', { command: 'git status' }, gitStatus());
-tool('bash', { command: 'docker ps' }, dockerPs(), 'Confirming the test database is up.');
-user('oh also, while you are in there, can you bump eslint to the latest 9.x? the lint job has been red for a week');
-tool('bash', { command: 'npm install eslint@latest @eslint/js@latest --save-dev' }, npmInstall(), 'Bumping eslint first, then I will come back to the 409.');
-tool('bash', { command: 'npx eslint . --ext .ts' }, lintOut(23));
-assistant('23 lint errors, all in files unrelated to the orders handler. Most are unused variables and console statements. I will fix them file by file.');
-for (const f of ['src/db/client.ts', 'src/api/validate.ts', 'src/lib/logger.ts', 'test/helpers/db.ts']) {
-  tool('apply_patch', { patch: `*** Begin Patch\n*** Update File: ${f}\n@@\n-  const res = await pool.query(text, params);\n-  console.log('query', text);\n+  const result = await pool.query(text, params);\n@@\n-  return res.rows;\n+  return result.rows;\n*** End Patch` }, `Done: applied patch to ${f} (2 hunks)`, `Fixing ${f}.`);
-}
-tool('bash', { command: 'npx eslint . --ext .ts' }, lintOut(11));
-for (const f of ['src/api/health.ts', 'src/lib/config.ts', 'src/workers/reconcile.ts']) {
-  tool('apply_patch', { patch: `*** Begin Patch\n*** Update File: ${f}\n@@\n-  let interval = 5000;\n+  const interval = 5000;\n@@\n-  if (status == 'ok') {\n+  if (status === 'ok') {\n*** End Patch` }, `Done: applied patch to ${f} (2 hunks)`, `Fixing ${f}.`);
-}
-tool('bash', { command: 'npx eslint . --ext .ts' }, '\n✔ No problems found\n');
-assistant('Lint is clean on eslint 9. Back to the idempotency failure.');
-user('haha nice. unrelated, but my coffee machine died this morning so if I seem grumpy that is why');
-assistant('Sorry to hear that — I will keep this quick so you can go find a replacement. Re-running the failing test to make sure the lint changes did not touch it.');
-tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL);
-tool('bash', { command: 'curl -s localhost:3000/health' }, '{"status":"ok","db":"up","cache":"up","uptimeSeconds":7412}', 'Sanity-checking the service is healthy before I change the handler.');
-tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL, 'One more run to rule out flakiness in the test itself.');
-tool('bash', { command: 'grep -rn "idempotency" src test | head -40' }, ['src/api/orders.ts:4:import { idempotency } from \'./idempotency\';', 'src/api/orders.ts:12:  if (await idempotency.seen(key)) {', 'src/api/orders.ts:15:  await idempotency.remember(key, { ttlSeconds: 86_400 });', 'src/api/idempotency.ts:3:export const idempotency = {', 'test/orders.test.ts:58:  it(\'is idempotent across gateway retries\', async () => {', 'test/orders.test.ts:63:      headers: { \'idempotency-key\': key },', 'test/helpers/gateway.ts:14:  // simulates the gateway timing out and retrying once with the same idempotency key'].join('\n'));
-tool('bash', { command: 'sed -n 50,80p test/orders.test.ts' }, `  it('is idempotent across gateway retries', async () => {\n    const key = 'ord-7f3a9c';\n    const first = gateway.postWithTimeout('/orders', cart, { headers: { 'idempotency-key': key }, timeoutMs: 50 });\n    await expect(first).rejects.toThrow(/timeout/);\n    const second = await request(app).post('/orders').set('idempotency-key', key).send(cart);\n    expect(second.status).toBe(201);\n    expect(second.body.status).toBe('pending');\n  });`);
-tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL, 'Confirming once more with the test body in front of me.');
+const DETOURS = [
+  ['prettier', 3, 'format'], ['vitest', 3, 'test'], ['typescript', 5, 'typecheck'], ['tsx', 4, 'build'],
+  ['supertest', 7, 'e2e'], ['pino', 9, 'logging'], ['zod', 4, 'validate'], ['pg', 8, 'db'],
+];
+const GRIPES = [
+  'my coffee machine died', 'my train was forty minutes late', 'the office AC gave up',
+  'the dog ate my headphones', 'my bike got a flat', 'the fire alarm went off twice',
+  'my laptop charger finally died', 'the neighbours started drilling at 7',
+];
+const act2 = (round) => {
+  const [pkg, major, job] = DETOURS[(round - 1) % DETOURS.length] ?? DETOURS[0];
+  const gripe = GRIPES[(round - 1) % GRIPES.length] ?? GRIPES[0];
+  tool('bash', { command: 'ls -la' }, lsOut(), 'Checking the repo layout.');
+  tool('bash', { command: 'git status' }, gitStatus());
+  tool('bash', { command: 'docker ps' }, dockerPs(), 'Confirming the test database is up.');
+  user(round === 0 ? 'oh also, while you are in there, can you bump eslint to the latest 9.x? the lint job has been red for a week' : `oh also, while you are in there, can you bump ${pkg} to the latest ${major}.x? the ${job} job has been red for a week`);
+  tool('bash', { command: round === 0 ? 'npm install eslint@latest @eslint/js@latest --save-dev' : `npm install ${pkg}@latest --save-dev` }, npmInstall(), round === 0 ? 'Bumping eslint first, then I will come back to the 409.' : `Bumping ${pkg} first, then I will come back to the 409.`);
+  tool('bash', { command: 'npx eslint . --ext .ts' }, lintOut(23));
+  assistant('23 lint errors, all in files unrelated to the orders handler. Most are unused variables and console statements. I will fix them file by file.');
+  for (const f of ['src/db/client.ts', 'src/api/validate.ts', 'src/lib/logger.ts', 'test/helpers/db.ts']) {
+    tool('apply_patch', { patch: `*** Begin Patch\n*** Update File: ${f}\n@@\n-  const res = await pool.query(text, params);\n-  console.log('query', text);\n+  const result = await pool.query(text, params);\n@@\n-  return res.rows;\n+  return result.rows;\n*** End Patch` }, `Done: applied patch to ${f} (2 hunks)`, `Fixing ${f}.`);
+  }
+  tool('bash', { command: 'npx eslint . --ext .ts' }, lintOut(11));
+  for (const f of ['src/api/health.ts', 'src/lib/config.ts', 'src/workers/reconcile.ts']) {
+    tool('apply_patch', { patch: `*** Begin Patch\n*** Update File: ${f}\n@@\n-  let interval = 5000;\n+  const interval = 5000;\n@@\n-  if (status == 'ok') {\n+  if (status === 'ok') {\n*** End Patch` }, `Done: applied patch to ${f} (2 hunks)`, `Fixing ${f}.`);
+  }
+  tool('bash', { command: 'npx eslint . --ext .ts' }, '\n✔ No problems found\n');
+  assistant('Lint is clean on eslint 9. Back to the idempotency failure.');
+  user(round === 0 ? 'haha nice. unrelated, but my coffee machine died this morning so if I seem grumpy that is why' : `haha nice. unrelated, but ${gripe} this morning so if I seem grumpy that is why`);
+  assistant('Sorry to hear that — I will keep this quick so you can go find a replacement. Re-running the failing test to make sure the lint changes did not touch it.');
+  tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL);
+  tool('bash', { command: 'curl -s localhost:3000/health' }, '{"status":"ok","db":"up","cache":"up","uptimeSeconds":7412}', 'Sanity-checking the service is healthy before I change the handler.');
+  tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL, 'One more run to rule out flakiness in the test itself.');
+  tool('bash', { command: 'grep -rn "idempotency" src test | head -40' }, ['src/api/orders.ts:4:import { idempotency } from \'./idempotency\';', 'src/api/orders.ts:12:  if (await idempotency.seen(key)) {', 'src/api/orders.ts:15:  await idempotency.remember(key, { ttlSeconds: 86_400 });', 'src/api/idempotency.ts:3:export const idempotency = {', 'test/orders.test.ts:58:  it(\'is idempotent across gateway retries\', async () => {', 'test/orders.test.ts:63:      headers: { \'idempotency-key\': key },', 'test/helpers/gateway.ts:14:  // simulates the gateway timing out and retrying once with the same idempotency key'].join('\n'));
+  tool('bash', { command: 'sed -n 50,80p test/orders.test.ts' }, `  it('is idempotent across gateway retries', async () => {\n    const key = 'ord-7f3a9c';\n    const first = gateway.postWithTimeout('/orders', cart, { headers: { 'idempotency-key': key }, timeoutMs: 50 });\n    await expect(first).rejects.toThrow(/timeout/);\n    const second = await request(app).post('/orders').set('idempotency-key', key).send(cart);\n    expect(second.status).toBe(201);\n    expect(second.body.status).toBe('pending');\n  });`);
+  tool('bash', { command: 'npm test -- test/orders.test.ts' }, FAIL, 'Confirming once more with the test body in front of me.');
+};
+for (let round = 0; round < scale; round++) act2(round);
 
 // ── act 3: the fix, verification, wrap-up (does not restate the early evidence) ──
 assistant('Root cause confirmed: the key is remembered before the insert commits, so a rolled-back first attempt poisons the retry. Fix: remember the key inside the transaction after the insert succeeds, and forget it if the transaction throws. No schema change is needed.');
@@ -128,4 +150,4 @@ tool('bash', { command: 'git diff --stat' }, ' package-lock.json     | 212 +++++
 user('great — before you write the summary for the PR, remind me what the two tickets were and whether the schema is untouched');
 
 process.stdout.write(JSON.stringify(msgs, null, 2));
-process.stderr.write(`${msgs.length} messages, ${JSON.stringify(msgs).length} chars\n`);
+process.stderr.write(`${msgs.length} messages, ${JSON.stringify(msgs).length} chars, ~${Math.ceil(JSON.stringify(msgs).length / 2.5)} tokens at 2.5 chars/token, scale ${scale}\n`);

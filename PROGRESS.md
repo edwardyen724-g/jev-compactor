@@ -33,3 +33,16 @@ Dated history of the project. Append; never rewrite.
   carries the query terms; topics 11 → 20; private vulnerability reporting enabled. Tutorial written
   and its snippets executed live. Source-of-truth files (CLAUDE.md, HANDOVER, PROGRESS, backlog,
   decisions) added.
+
+## 2026-09-19
+
+- Prior-art sections removed from the READMEs and `llms.txt` at Edward's request (D19); commit history
+  rewritten to drop co-author trailers.
+- Wiring feedback shipped (D22): `status()`, `isWrapped()`, `verbose`, `selfTest()`, `jev-compactor
+  doctor`, MCP `self_test`; tutorial section "Confirm it is wired in".
+- Benchmark controls replaced by the products' real compaction mechanisms (D20): a research pass
+  (six researchers, one died to a usage limit, transcripts mined instead of re-run) and one
+  implementer produced twelve ported baselines with source/license/fidelity headers, a 61k-token
+  fixture for Anthropic's real threshold compaction, and the matrix in `docs/BENCHMARK.md`. Path
+  metric tightened twice (slash-joined names, `Node.js`-style brands).
+- `votes` option added (D21) after the determinism probe showed a 53–76% saved range across runs.

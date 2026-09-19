@@ -10,9 +10,10 @@ pushed to `github.com/edwardyen724-g/jev-compactor` with CI green. `packages/jev
 publish-ready at 0.1.0 (105 kB tarball, ESM + CJS + types, MIT) but **not yet on npm** — that is
 Edward's action. The package compacts OpenAI, Anthropic, LangChain and plain message arrays through
 one Jev request per batch, never rewrites a kept message, gates the agent's pending action on
-destructive/exfiltration findings, and emits a per-decision report. The headline benchmark: 64.5%
-tokens saved with 100% evidence retention in 366 ms for $0.0004 on a 64-message session, versus
-Claude summarization at 96% saved but 75% retention, 6 s and $0.03 (`docs/BENCHMARK.md`).
+destructive/exfiltration findings, and emits a per-decision report. The headline benchmark, against the products' own
+compaction mechanisms ported verbatim: 73% saved (53–76% across runs) with all four early facts kept
+in 350 ms for $0.0004 on a 64-message session, versus 61–86% saved at $0.013–$0.099 and 1–61 s for
+the model-based products, half of which lost a fact (`docs/BENCHMARK.md`).
 
 ## What exists
 
@@ -20,7 +21,7 @@ Claude summarization at 96% saved but 75% retention, 6 s and $0.03 (`docs/BENCHM
 |---|---|---|
 | `packages/jev-compactor/src` | 13 modules per `docs/MODULES.md`; `types.ts` frozen | 439 unit + 48 live tests green |
 | `packages/jev-compactor/dist` | `index.{mjs,cjs}`, `cli.mjs`, `mcp.mjs` | built by `pnpm typecheck`/`build`; the bins bundle the library a second time (backlog) |
-| `packages/bench` | runner, truncation + Claude-summarization baselines, determinism probe, long-noisy fixture generator | numbers in `docs/BENCHMARK.md`, raw JSON in `docs/benchmark/` |
+| `packages/bench` | runner, twelve product-mechanism baselines + truncation + generic summary, determinism probe (`--votes`), fixture generator (`--scale`) | numbers in `docs/BENCHMARK.md`, raw JSON in `docs/benchmark/` |
 | `docs/` | PRODUCT (verbatim spec), JEV-API, ARCHITECTURE, MODULES, DECISIONS, BENCHMARK, LANDSCAPE, BUILD-PLAN, TUTORIAL, BACKLOG | current as of 2026-09-18 |
 | GitHub | public repo, description + topics set, CI on push | 4 commits on `main`, no co-author trailers |
 

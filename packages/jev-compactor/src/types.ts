@@ -189,6 +189,13 @@ export interface CompactOptions {
   requestTokens?: number;
   /** Concurrent Jev requests. Default 8. */
   concurrency?: number;
+  /**
+   * Ask every question this many times, in separate concurrent requests, and average the answers.
+   * Jev's probabilities move a few hundredths between identical requests, which can flip a unit
+   * near `dropThreshold`; 3 votes narrow that at 3× the (tiny) Jev cost and no extra latency.
+   * Default 1.
+   */
+  votes?: number;
   /** Run the Foreman questions and honor `blocked`. Default false (findings are still reported). */
   safetyGating?: boolean;
   reviewThreshold?: number; // default 0.35

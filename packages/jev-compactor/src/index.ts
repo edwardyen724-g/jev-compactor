@@ -10,6 +10,7 @@ export { loadEnvLocal } from './env.js';
 export type { JevAnswers } from './jev.js';
 export {
   askJev,
+  averageVotes,
   candidateQuestion,
   createClient,
   foremanQuestions,

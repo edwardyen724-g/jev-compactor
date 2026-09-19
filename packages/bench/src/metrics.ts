@@ -15,13 +15,30 @@ import { type AnyMessage, normalize } from 'jev-compactor';
 const REFERENCE =
   /^(https?:\/\/|(?:[\w@.-]+\/)+[\w.-]+\.\w{1,8}$|[\w-]+\.(?:[cm]?[jt]sx?|py|go|rs|rb|java|kt|swift|c|cc|cpp|h|hpp|cs|php|sh|json|ya?ml|toml|md|sql|env|txt|css|html)$)/i;
 
+/** Product names that look like bare file names (`Node.js`, `Next.js`, `Vue.js`) are prose, not files. */
+const BRAND_NOT_FILE = /^[A-Z][A-Za-z]+\.js$/;
+
 export function isReference(token: string): boolean {
-  return REFERENCE.test(token);
+  return REFERENCE.test(token) && !BRAND_NOT_FILE.test(token);
+}
+
+/**
+ * A summary sometimes writes two files as one token (`package.json/package-lock.json`); split such
+ * a token at an extension followed by a slash so each real file is judged on its own.
+ */
+export function splitJoined(token: string): string[] {
+  const parts = token.split(/(?<=\.[A-Za-z0-9]{1,8})\/(?=[\w.-]+\.[A-Za-z0-9]{1,8}$)/);
+  return parts.length > 1 && parts.every(isReference) ? parts : [token];
 }
 
 export function pathsOf(messages: AnyMessage[]): Set<string> {
   const { frames } = normalize(messages, 'auto');
-  return new Set(frames.flatMap((f) => f.paths).filter(isReference));
+  return new Set(
+    frames
+      .flatMap((f) => f.paths)
+      .flatMap(splitJoined)
+      .filter(isReference),
+  );
 }
 
 export function pathsOfText(text: string): Set<string> {

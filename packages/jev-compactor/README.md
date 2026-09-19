@@ -250,6 +250,7 @@ Every field of `CompactOptions` (`withCompaction` also takes `cooldownTurns`):
 | `stateTokens` | `20_000` | Budget for the skeleton state (Jev's hard limit is 32k). |
 | `requestTokens` | `56_000` | Budget for state + questions per request (limit 64k); questions are batched beyond it. |
 | `concurrency` | `8` | Concurrent Jev requests. |
+| `votes` | `1` | Ask every question this many times in separate concurrent requests and average the answers. Jev's probabilities move a few hundredths between identical requests, which can flip a unit near `dropThreshold`; `3` narrows that at 3× the (tiny) Jev cost and no extra latency. |
 | `safetyGating` | `false` | Honor `blocked`. Findings are reported either way. |
 | `reviewThreshold` | `0.35` | A Jev finding at/above this is `review`. |
 | `actionThreshold` | `0.70` | … and at/above this is `action`. |
@@ -337,11 +338,12 @@ MCP server scrub the API key from every report and error text they print, unit p
 
 ## Benchmark
 
-On one 64-message, 12.7k-token agent session with a 6k-token budget, jev-compactor cut tokens by
-64.5% in 366 ms for $0.0004 with zero hallucinated file paths and all 4 early facts retained;
-oldest-first truncation cut 53.0% but kept 1 of 4 facts; Claude Sonnet 5 summarization cut 96.2% in
-6.1 s for $0.0305 and wrote one file path that does not exist in the transcript. Measured 2026-09-18
-with `jev-1.13.0`; metrics, raw results and reproduce commands:
+The controls are real products' compaction mechanisms, ported verbatim from their open-source code
+(Codex CLI, Gemini CLI, Grok Build, OpenCode, LangChain, Hermes, goose, Aider, the Vercel AI SDK's
+prune) plus Anthropic's compaction API. On a 64-message, 12.7k-token session with a 6k budget,
+jev-compactor saved 73% (53–76% across runs) in 350 ms for $0.0004 with all four early facts kept
+verbatim; the model-based mechanisms saved 61–86% at $0.013–$0.099 and 1–61 s, and half of them
+lost one of the facts. Every arm, the caveats, the raw JSON and the reproduce commands:
 [docs/BENCHMARK.md](https://github.com/edwardyen724-g/jev-compactor/blob/main/docs/BENCHMARK.md).
 A step-by-step walkthrough:
 [docs/TUTORIAL.md](https://github.com/edwardyen724-g/jev-compactor/blob/main/docs/TUTORIAL.md).

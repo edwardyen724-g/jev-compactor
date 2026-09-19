@@ -106,3 +106,7 @@ Unit tests import from `../src/<module>.js`. Fixtures in `fixtures/*.json`: `ope
 - `engine.ts`: `export const SELF_TEST_MESSAGES` (9 plain messages; the pending action is an `rm -rf`), `export async function selfTest(options?): Promise<SelfTestResult>` — runs `compact` with `trigger: 'always'`, `keepRecent: 2`, `maxTokens: 400`, `safetyGating: false`; stage `key` when the fail-open error says "No API key", `jev` for any other Jev failure, `pipeline` when the `rm -rf` is not flagged by both the pattern floor and Jev at action level, else `ok`.
 - `cli.ts`: `doctor` (no `<file>`): key present and its source (environment vs the `.env.local` path `loadEnvLocal` returned), `GET /v1/models` via `createClient`, then `selfTest()`; ✓/✗ lines, exit 1 at the first ✗, everything redacted.
 - `mcp.ts`: tool `self_test` (no input) returns the `SelfTestResult` with `error` redacted.
+
+## `votes` (added 2026-09-19)
+
+`CompactOptions.votes` (default 1, `ResolvedOptions.votes` ≥ 1). `askJev` expands every batch into `votes` runs (identical questions, separate requests, all under the same concurrency pool), folds each vote's batches with `collectAnswers`, then `averageVotes(perVote)`: mean `pKeep`/`confidence` per unit over the votes that answered it, mean per Foreman noul, mean progress. The run fails as a whole only when no vote of batch 0 (the Foreman) came back; a candidate no vote answered stays unjudged. Telemetry counts every request. `packages/bench/scripts/determinism.mjs --votes N` measures the spread.

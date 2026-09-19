@@ -22,5 +22,13 @@ Jev wall-clock and cost from the report, **path fidelity** = share of file paths
 the output that exist in the original (jev-compactor should be 100% by construction; summaries can
 invent paths — those are listed as `hallucinated`), and Foreman findings.
 
+Product baselines: [`baselines/README.md`](baselines/README.md) lists one file per real agent
+product's compaction mechanism (Anthropic's compaction API, Codex CLI, Gemini CLI, grok-build,
+OpenCode, LangChain, Hermes, Aider, goose, Vercel AI SDK `pruneMessages`), each ported with the
+upstream prompt and algorithm, plus the closed products that cannot be reproduced. Pass any of them
+with `--baseline`. `fixtures/gen-long.mjs --scale <n>` grows the long fixture deterministically;
+`fixtures/long-noisy-openai-55k.json` (scale 6) is large enough for Anthropic's real threshold
+compaction.
+
 Privacy: transcripts stay in `local/` and results in `results/`, both gitignored. Compaction sends an
 abridged copy of each transcript to `api.typesafe.ai`; the baseline sends the full text to Anthropic.
