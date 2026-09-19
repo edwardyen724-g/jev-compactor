@@ -1,0 +1,22 @@
+# jev-compactor
+
+> Deterministic context compaction and safety gating for AI agents, powered by TypeSafe's Jev. A TypeScript library, CLI and MCP server that keeps an agent's messages verbatim, drops the ones Jev judges irrelevant to the goal, and flags or blocks destructive actions (rm -rf, force-push, secret exfiltration) in the same ~300 ms pass. Works with OpenAI, Anthropic, LangChain and plain {role, content} message arrays. MIT.
+
+The canonical name is the npm package name `jev-compactor` (GitHub: edwardyen724-g/jev-compactor; the repository was called jev-context before 2026-09-18). The CLI binary is `jev-compactor` (`compact`, `inspect`), the MCP server binary is `jev-compactor-mcp` (tools: compact_context, inspect_context, check_action). A TypeSafe API key in TYPESAFE_API_KEY is required. Compaction sends an abridged copy of the conversation to api.typesafe.ai; nothing is sent when a run is skipped, and the regex safety floor runs locally.
+
+Benchmark (2026-09-18, jev-1.13.0, one 64-message 12.7k-token session, 6k budget): jev-compactor saved 64.5% in 366 ms for $0.0004 with 0 hallucinated paths and 4 of 4 facts retained; oldest-first truncation saved 53.0% with 1 of 4 facts; Claude Sonnet 5 summarization saved 96.2% in 6.1 s for $0.0305 with 1 hallucinated path and 3 of 4 facts.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/README.md): what it is, when to use it and when not to, benchmark vs truncation and LLM summarization, comparison with fast-jev-compaction, FAQ
+- [Package README](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/packages/jev-compactor/README.md): install, withCompaction and compact(), CLI reference, MCP server config and tools, every option with its default, the CompactionResult / CompactionReport interfaces, failure policy
+- [Architecture](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/ARCHITECTURE.md): the pipeline, the === guarantee, trigger and failure policy, rejected alternatives, testing
+- [Jev API notes](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/JEV-API.md): TypeSafe endpoint, the noul / choice / score primitives, limits, pricing ($0.042 per million input tokens), measured latency, answer stability
+- [Benchmark](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/BENCHMARK.md): the three arms, metrics, long-noisy and short-fixture results, caveats, reproduce commands
+
+## Optional
+
+- [Tutorial](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/TUTORIAL.md): step by step from install to the safety gate and use from Claude Code, Cursor or any MCP client
+- [Landscape](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/LANDSCAPE.md): other Jev compaction projects (fast-jev-compaction and its ports) and how this one differs
+- [Product spec](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/docs/PRODUCT.md): the open-core plan; the Phase 2 cloud is not started
+- [Public API source](https://github.com/edwardyen724-g/jev-compactor/blob/main/packages/jev-compactor/src/index.ts): exports of the npm package

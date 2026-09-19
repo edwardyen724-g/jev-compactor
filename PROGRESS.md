@@ -26,3 +26,10 @@ Dated history of the project. Append; never rewrite.
   differed (cause: Jev answer variance). Results in `docs/BENCHMARK.md`.
 - Pushed to GitHub; CI fixed twice (pnpm version clash with `packageManager`; bench typecheck
   needs the library built first). Co-author trailers stripped from history at Edward's request.
+- Discoverability pass (SEO/AEO/GEO) from a 3-agent research workflow: README rewritten around a
+  definitional first sentence, when-to-use / when-not, query-mirroring H2s, a vs-fast-jev-compaction
+  table and a FAQ; root LICENSE (GitHub had reported none), CONTRIBUTING, SECURITY, CODE_OF_CONDUCT,
+  issue/PR templates, CITATION.cff, CHANGELOG, llms.txt; repo description shortened so the page title
+  carries the query terms; topics 11 → 20; private vulnerability reporting enabled. Tutorial written
+  and its snippets executed live. Source-of-truth files (CLAUDE.md, HANDOVER, PROGRESS, backlog,
+  decisions) added.

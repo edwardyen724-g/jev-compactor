@@ -38,8 +38,17 @@ Ordered by value. Tick when done and move the line to `PROGRESS.md`. Add follow-
       an installed `@langchain/core`.
 - [ ] `TYPESAFE_LOG_LEVEL` is deliberately not honored (log level pinned to `warn`); document a
       `logger` option instead if users ask.
-- [ ] Social preview image for the GitHub repo (needs the web UI); `llms.txt`, FAQ, community
-      files per the SEO/AEO/GEO plan.
+- [ ] Social preview image for the GitHub repo (Settings › Social preview, 1280×640: the one-line
+      definition, the two-line snippet, the three benchmark numbers). `llms.txt`, FAQ, community files,
+      CITATION.cff and CHANGELOG landed 2026-09-18.
+- [ ] After `npm publish`: `git tag v0.1.0`, `gh release create v0.1.0` (release pages are crawlable,
+      tags/commits are not), set the repo homepage to the npm page, move CHANGELOG's Unreleased to 0.1.0.
+- [ ] Register `jev-compactor-mcp` in the official MCP registry, then glama.ai, mcp.so, Smithery,
+      PulseMCP; PR to punkpeye/awesome-mcp-servers.
+- [ ] One Show HN, one Reddit post (r/LangChain, r/ClaudeAI or r/LocalLLaMA) and one X thread built
+      around the benchmark sentence and the vs-fast-jev-compaction table; optionally a 2–3 minute
+      `inspect` demo video titled "Reduce agent context tokens without summarization". Third-party
+      pages (Reddit, YouTube) are what answer engines cite; github.com is not in their top domains.
 
 ## Phase 2 — Sealed Context Cloud (do not start before Phase 1's done-list is green)
 

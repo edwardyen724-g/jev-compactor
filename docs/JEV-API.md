@@ -50,7 +50,7 @@ higher thresholds than read-only ones. Noul and Choice numbers are **not** compa
 | Price | **$0.042 per million input tokens; output free** |
 | Errors | 401 auth, 400/422 validation, 429 rate limit, 529 overloaded; SDK retries 408/429/5xx with backoff |
 
-## Measured latency (from `~/projects/jev-context`, 2026-09-18, `jev-1.13.0`)
+## Measured latency (2026-09-18, `jev-1.13.0`)
 
 | Request | Input tokens | Latency |
 |---|---|---|

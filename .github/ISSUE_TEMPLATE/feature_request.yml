@@ -1,0 +1,15 @@
+name: Feature request
+description: A change to what jev-compactor does
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem this solves
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: Say which contract it touches (kept messages are the caller's objects, tool pairs stay whole, every drop is attributable, fail-open) and whether it changes the report shape.
+    validations: { required: true }

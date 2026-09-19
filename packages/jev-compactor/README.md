@@ -1,7 +1,8 @@
 # jev-compactor
 
 Deterministic context compaction and safety gating for AI agents, powered by
-[TypeSafe's Jev](https://typesafe.ai). Framework-agnostic: it works on OpenAI, Anthropic, LangChain
+[TypeSafe's Jev](https://typesafe.ai). Source, docs and benchmark:
+[github.com/edwardyen724-g/jev-compactor](https://github.com/edwardyen724-g/jev-compactor). Framework-agnostic: it works on OpenAI, Anthropic, LangChain
 and plain `{role, content}` message arrays, wraps your existing client in two lines, and ships as a
 CLI and an MCP server. **Jev judges relevance; code decides structure.** Jev answers one bounded
 question per message — *does this stay in working memory for the goal?* — with a calibrated
@@ -293,6 +294,17 @@ fails open as a whole when the batch carrying the Foreman failed. When Jev rejec
 large — it tokenizes CJK and dense JSON far denser than the 2.5 chars/token estimate — the state is
 re-abridged, one stage further and against a tighter budget, until it is accepted. The CLI and the
 MCP server scrub the API key from every report and error text they print, unit previews included.
+
+## Benchmark
+
+On one 64-message, 12.7k-token agent session with a 6k-token budget, jev-compactor cut tokens by
+64.5% in 366 ms for $0.0004 with zero hallucinated file paths and all 4 early facts retained;
+oldest-first truncation cut 53.0% but kept 1 of 4 facts; Claude Sonnet 5 summarization cut 96.2% in
+6.1 s for $0.0305 and wrote one file path that does not exist in the transcript. Measured 2026-09-18
+with `jev-1.13.0`; metrics, raw results and reproduce commands:
+[docs/BENCHMARK.md](https://github.com/edwardyen724-g/jev-compactor/blob/main/docs/BENCHMARK.md).
+A step-by-step walkthrough:
+[docs/TUTORIAL.md](https://github.com/edwardyen724-g/jev-compactor/blob/main/docs/TUTORIAL.md).
 
 ## Prior art
 

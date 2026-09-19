@@ -1,0 +1,33 @@
+# Citation metadata for jev-compactor (https://citation-file-format.github.io).
+# GitHub renders a "Cite this repository" widget from this file. Update `version` and
+# `date-released` when tagging a release; add a `doi` under `identifiers` if a Zenodo DOI is minted.
+cff-version: 1.2.0
+message: "If you use jev-compactor in your work, please cite it as below."
+type: software
+title: "jev-compactor"
+abstract: >-
+  Deterministic context compaction and safety gating for AI agents, powered by TypeSafe's Jev.
+  A TypeScript library, CLI and MCP server that keeps an agent's messages verbatim, drops the
+  ones Jev judges irrelevant to the goal, and flags or blocks destructive actions in the same
+  pass. Works with OpenAI, Anthropic, LangChain and plain message arrays.
+authors:
+  - family-names: Yen
+    given-names: Edward
+    email: edwardyen724@gmail.com
+version: 0.1.0
+date-released: "2026-09-18"
+license: MIT
+repository-code: "https://github.com/edwardyen724-g/jev-compactor"
+url: "https://github.com/edwardyen724-g/jev-compactor"
+keywords:
+  - context-compaction
+  - context-engineering
+  - ai-agents
+  - llm
+  - jev
+  - typesafe
+  - langchain
+  - mcp
+  - guardrails
+  - agent-safety
+  - typescript

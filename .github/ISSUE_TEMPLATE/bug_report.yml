@@ -1,0 +1,25 @@
+name: Bug report
+description: Something jev-compactor does wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the `inspect` output or `report` JSON with the API key removed (the CLI and MCP server redact it already).
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: jev-compactor version, Node version, message format (openai / anthropic / langchain / plain)
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal transcript or steps to reproduce
+      description: No real keys, customer data or someone else's chat. A trimmed fixture is ideal.
