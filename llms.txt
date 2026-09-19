@@ -4,7 +4,7 @@
 
 The canonical name is the npm package name `jev-compactor` (GitHub: edwardyen724-g/jev-compactor; the repository was called jev-context before 2026-09-18). The CLI binary is `jev-compactor` (`compact`, `inspect`), the MCP server binary is `jev-compactor-mcp` (tools: compact_context, inspect_context, check_action). A TypeSafe API key in TYPESAFE_API_KEY is required. Compaction sends an abridged copy of the conversation to api.typesafe.ai; nothing is sent when a run is skipped, and the regex safety floor runs locally.
 
-Benchmark (2026-09-18, jev-1.13.0, one 64-message 12.7k-token session, 6k budget): jev-compactor saved 64.5% in 366 ms for $0.0004 with 0 hallucinated paths and 4 of 4 facts retained; oldest-first truncation saved 53.0% with 1 of 4 facts; Claude Sonnet 5 summarization saved 96.2% in 6.1 s for $0.0305 with 1 hallucinated path and 3 of 4 facts.
+Benchmark (2026-09-19, jev-1.13.0, one 64-message 12.7k-token session, 6k budget, controls = the products' own compaction mechanisms ported verbatim): jev-compactor saved 73% (53–76% across runs) in 350 ms for $0.0004 with all 4 early facts kept verbatim; Anthropic's compaction API, Codex CLI, OpenCode, Gemini CLI, Grok Build, LangChain, Hermes and goose saved 61–86% at $0.013–$0.099 and 1–61 s, half of them losing a fact; oldest-first truncation saved 53% with 1 of 4 facts. On a 61k-token session jev-compactor saved 95.4% with 4 of 4 in 593 ms for $0.0014 vs Anthropic's real threshold compaction at 97.6% with 3 of 4 in 14.6 s for $0.145.
 
 ## Docs
 
