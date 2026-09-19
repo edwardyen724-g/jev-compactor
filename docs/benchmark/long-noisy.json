@@ -1,0 +1,51 @@
+{
+  "maxTokens": 6000,
+  "mustContain": [
+    "OPS-2291",
+    "API-1187",
+    "duplicate idempotency key",
+    "migration freeze"
+  ],
+  "rows": [
+    {
+      "transcript": "long-noisy-openai.json",
+      "source": "messages-json",
+      "messages": 64,
+      "tokensBefore": 12667,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 4493,
+          "saved": 0.6452988079261073,
+          "ms": 366,
+          "usd": 0.00039774000000000005,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": false,
+          "foreman": 1
+        },
+        "truncate-oldest": {
+          "tokensAfter": 5957,
+          "saved": 0.529722902028894,
+          "ms": 1,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.25
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 486,
+          "saved": 0.961632588616089,
+          "ms": 6141,
+          "usd": 0.030506,
+          "fidelity": 0.9230769230769231,
+          "hallucinated": [
+            "db/client.ts"
+          ],
+          "retention": 0.75,
+          "summary": "The two tickets referenced were:\n\n- **OPS-2291** — the migration freeze currently in effect (until Friday), which is why no schema/migration changes are allowed.\n- **API-1187** — owned by the gateway team, covering the retry behavior itself (confirmed correct; not something we're changing).\n\n**Schema status: untouched.** The fix only reordered logic in `src/api/orders.ts` — moving the `idempotency.remember(key, ...)` call to *after* the successful inserts inside the `db.transaction` block, instead of before the transaction starts. No migrations were added or modified, and `migrations/` doesn't appear in the diff stat. The rest of the changed files (`health.ts`, `validate.ts`, `db/client.ts`, `config.ts`, `logger.ts`, `reconcile.ts`, `test/helpers/db.ts`, plus `package.json`/`package-lock.json`) are all from the unrelated ESLint 9 bump and lint-fix pass, not schema-related.\n\nSo the PR will bundle two independent changes: the idempotency bug fix (OPS-2291/API-1187 context, no schema touch) and the ESLint 9 upgrade + lint cleanup — worth calling out as two separable concerns in the PR description, possibly even two commits, in case reviewers want to split them."
+        }
+      }
+    }
+  ]
+}

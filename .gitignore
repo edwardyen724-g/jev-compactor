@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+
+# benchmark inputs are private transcripts; never committed
+packages/bench/local/
+packages/bench/results/

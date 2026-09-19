@@ -1,0 +1,6 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+allowBuilds:
+  # tsdown/vitest pull esbuild, which needs its native binary post-install.
+  esbuild: true

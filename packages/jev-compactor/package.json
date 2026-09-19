@@ -1,0 +1,75 @@
+{
+  "name": "jev-compactor",
+  "version": "0.1.0",
+  "description": "Deterministic context compaction and safety gating for AI agents, powered by TypeSafe's Jev. Keeps what matters verbatim, drops the rest, intercepts destructive actions. Framework-agnostic: OpenAI, Anthropic, LangChain, MCP.",
+  "license": "MIT",
+  "author": "Edward Yen <edwardyen724@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edwardyen724-g/jev-compactor.git",
+    "directory": "packages/jev-compactor"
+  },
+  "homepage": "https://github.com/edwardyen724-g/jev-compactor#readme",
+  "keywords": [
+    "jev",
+    "typesafe",
+    "context-compaction",
+    "context-engineering",
+    "ai-agents",
+    "llm",
+    "langchain",
+    "mcp",
+    "guardrails",
+    "agent-safety",
+    "openai",
+    "anthropic"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "jev-compactor": "./dist/cli.mjs",
+    "jev-compactor-mcp": "./dist/mcp.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude '**/*.live.test.ts'",
+    "test:live": "vitest run .live.test.ts",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@typesafe-ai/sdk": "^0.6.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  }
+}

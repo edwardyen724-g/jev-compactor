@@ -1,0 +1,19 @@
+{
+  "name": "@jev-compactor/bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Benchmark harness: jev-compactor vs LLM summarization on real agent transcripts — tokens saved, Jev cost, latency, path fidelity.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "bench": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "jev-compactor": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

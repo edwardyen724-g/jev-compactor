@@ -1,0 +1,162 @@
+{
+  "maxTokens": 4000,
+  "mustContain": [
+    "expected null to deeply equal",
+    "CLOCK_SKEW_MS",
+    "export function signSession"
+  ],
+  "rows": [
+    {
+      "transcript": "anthropic-tool-loop.json",
+      "source": "messages-json",
+      "messages": 33,
+      "tokensBefore": 5548,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 4579,
+          "saved": 0.17465753424657537,
+          "ms": 348,
+          "usd": 0.00019735800000000002,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": true,
+          "foreman": 2
+        },
+        "truncate-oldest": {
+          "tokensAfter": 3923,
+          "saved": 0.2928983417447729,
+          "ms": 0,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.6666666666666666
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 1001,
+          "saved": 0.8195746214852199,
+          "ms": 11254,
+          "usd": 0.021642,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.3333333333333333,
+          "summary": "## Summary\n\n**Task:** Fix failing unit test in `src/auth.ts` (CI red on main).\n\n**Root cause found:** In `verifySession` (src/auth.ts), the clock-skew tolerance was applied in the wrong direction:\n```ts\n// buggy:\nif (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n```\nThis effectively shortened every session's lifetime by `CLOCK_SKEW_MS` (60s) instead of granting a 60s grace period past expiry, causing valid freshly-signed sessions (expiring in exactly 60s) to be rejected.\n\n**Investigation path:**\n1. Reproduced with `pnpm test` — confirmed 1/3 tests failing in `test/auth.test.ts` (`accepts a freshly signed session`).\n2. Verified HMAC signing/comparison was correct via a `tsx -e` inline script (`sig match: true`, both digests 43 chars) — ruled out signature-length/timing-safe-equal issues.\n3. Considered (and was explicitly told not to) deleting/restoring `src/` to rule out stale build artifacts — user clarified there's no compiled output, vitest runs TS directly.\n4. User pointed at the expiry check directly; identified the inverted skew logic.\n\n**Failed attempt:** First tried `sed -i '' 's/session.expiresAt <= now + CLOCK_SKEW_MSEC/.../'` — typo (`CLOCK_SKEW_MSEC` vs actual `CLOCK_SKEW_MS`) meant no match, sed exited 0 silently, file unchanged, test still failed identically. Caught by re-running `pnpm test` and diffing output.\n\n**Fix applied (via apply_patch, verified as actually applied):**\n```ts\n// src/auth.ts\n- if (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n+ if (session.expiresAt + CLOCK_SKEW_MS <= now) return null;\n```\n\n**Verification:** `pnpm test` → all 3 original tests pass (`test/auth.test.ts (3 tests)`).\n\n**Test file changes:** A boundary test (session expiring exactly at `now`, expected to pass due to skew window) was added via apply_patch and confirmed passing (4/4 tests), but was **explicitly reverted** per user request (`git restore test/auth.test.ts`) since that case will be covered in a separate PR. Confirmed `test/auth.test.ts` is back to original 3 tests, all green.\n\n**Final state:**\n- `src/auth.ts`: one-line fix applied and confirmed present (expiry check now correctly adds skew tolerance rather than subtracting it).\n- `test/auth.test.ts`: unchanged from original (3 tests, no boundary test added).\n- `pnpm test`: green, 3/3 tests passing.\n\n**Status:** Complete. No further action needed unless the separate PR for additional skew-window test cases is requested."
+        }
+      }
+    },
+    {
+      "transcript": "langchain.json",
+      "source": "messages-json",
+      "messages": 35,
+      "tokensBefore": 5536,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 4072,
+          "saved": 0.26445086705202314,
+          "ms": 234,
+          "usd": 0.00020088600000000003,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": false,
+          "foreman": 2
+        },
+        "truncate-oldest": {
+          "tokensAfter": 3868,
+          "saved": 0.30130057803468213,
+          "ms": 1,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.6666666666666666
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 746,
+          "saved": 0.8652456647398844,
+          "ms": 7700,
+          "usd": 0.018296,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.3333333333333333,
+          "summary": "## Status: Complete\n\n**Task**: Fix failing unit test in `src/auth.ts` (CI red on main).\n\n### Root cause\nIn `verifySession` (src/auth.ts), the clock-skew tolerance was applied in the wrong direction:\n```ts\nif (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n```\nThis effectively shortened every session's lifetime by 60s instead of granting a 60s grace period past expiry, so a token expiring exactly 60s from `now` (the test fixture) was incorrectly rejected.\n\n### Fix applied\nSingle-line change in `src/auth.ts`:\n```ts\nif (session.expiresAt + CLOCK_SKEW_MS <= now) return null;\n```\nApplied via `apply_patch` (an earlier attempt with `sed` failed silently due to a typo — matched `CLOCK_SKEW_MSEC` instead of `CLOCK_SKEW_MS`, exited 0 but changed nothing; this was caught by re-running tests and seeing an identical failure).\n\n### Verification\n`pnpm test` → all 3 original tests in `test/auth.test.ts` pass:\n- `verifySession > accepts a freshly signed session` ✓\n- `verifySession > rejects an expired session` ✓\n- `verifySession > rejects a tampered signature` ✓\n\n### Other notes\n- A user request to delete/restore `src/` via `rm -rf ./src && git checkout src` was correctly blocked by the user before execution — not needed anyway, since there was no stale build artifact issue.\n- A boundary test (`expiresAt === now`) was added at user request, verified to pass (4/4 tests), then reverted per follow-up instruction (deferred to a separate PR). Repo is back to original 3 tests, all passing.\n\n### Final diff (only change remaining)\n`src/auth.ts`, in `verifySession`:\n```diff\n- if (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n+ if (session.expiresAt + CLOCK_SKEW_MS <= now) return null;\n```\nNo other files modified. `test/auth.test.ts` is unchanged from its original state on main."
+        }
+      }
+    },
+    {
+      "transcript": "openai-tool-loop.json",
+      "source": "messages-json",
+      "messages": 35,
+      "tokensBefore": 5541,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 4079,
+          "saved": 0.2638512903807977,
+          "ms": 235,
+          "usd": 0.00020088600000000003,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": true,
+          "foreman": 2
+        },
+        "truncate-oldest": {
+          "tokensAfter": 3880,
+          "saved": 0.2997653853095109,
+          "ms": 0,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.6666666666666666
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 932,
+          "saved": 0.8317993142032124,
+          "ms": 9760,
+          "usd": 0.020346,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.3333333333333333,
+          "summary": "## Status: Complete\n\n**Task**: Fix failing unit test `verifySession > accepts a freshly signed session` in `src/auth.ts`, reported via `pnpm test` on CI.\n\n**Root cause**: In `verifySession` (src/auth.ts), the clock-skew tolerance was applied in the wrong direction. The original guard:\n```ts\nif (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n```\neffectively *shortened* every session's lifetime by 60s instead of tolerating up to 60s of clock drift. A session expiring in exactly 60s (as in the test) was incorrectly rejected.\n\n**Fix applied** (via `apply_patch`, single line in `src/auth.ts`):\n```ts\nif (session.expiresAt + CLOCK_SKEW_MS <= now) return null;\n```\n\n**Dead ends encountered along the way**:\n- Initial hypothesis (signature/base64url length mismatch) was ruled out via a `tsx` probe script — signatures matched and both digests were 43 chars.\n- Attempted fix via `sed -i '' 's/session.expiresAt <= now + CLOCK_SKEW_MSEC/.../'` — silently no-opped due to a typo (`CLOCK_SKEW_MSEC` vs actual `CLOCK_SKEW_MS`), `sed` exited 0 but changed nothing; re-running tests showed identical failure, which exposed the no-op.\n- User explicitly vetoed a proposed `rm -rf ./src && git checkout src` \"fix stale build\" attempt — this was **not executed**; correctly redirected to re-examine the expiry check instead.\n- Switched to `apply_patch` for reliability (fails loudly on context mismatch), which worked.\n\n**Verification**: `pnpm test` now shows all 3 original tests passing:\n```\n✓ test/auth.test.ts (3 tests) 11ms\nTest Files  1 passed (1)\n     Tests  3 passed (3)\n```\n\n**Test file status**: A boundary test (`accepts a session expiring exactly at now`) was added per user request, then explicitly reverted per follow-up user request (\"skip the boundary test — we will do it in a separate PR\"), via `git restore test/auth.test.ts`. Confirmed back to original 3 tests, all green.\n\n**Final diff in repo**: Only `src/auth.ts` is changed from the original main, one line:\n- Before: `if (session.expiresAt <= now + CLOCK_SKEW_MS) return null;`\n- After: `if (session.expiresAt + CLOCK_SKEW_MS <= now) return null;`\n\n`test/auth.test.ts` is unchanged from its original state (3 tests). No other files touched. Nothing destructive was run. Ready for commit/PR."
+        }
+      }
+    },
+    {
+      "transcript": "plain-chat.json",
+      "source": "messages-json",
+      "messages": 33,
+      "tokensBefore": 4471,
+      "arms": {
+        "jev-compactor": {
+          "tokensAfter": 3352,
+          "saved": 0.2502795795124133,
+          "ms": 364,
+          "usd": 0.00028677600000000003,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1,
+          "deterministic": true,
+          "foreman": 3
+        },
+        "truncate-oldest": {
+          "tokensAfter": 3894,
+          "saved": 0.1290539029299933,
+          "ms": 0,
+          "usd": 0,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 1
+        },
+        "summarize:claude-sonnet-5": {
+          "tokensAfter": 611,
+          "saved": 0.8633415343323642,
+          "ms": 6363,
+          "usd": 0.015182,
+          "fidelity": 1,
+          "hallucinated": [],
+          "retention": 0.3333333333333333,
+          "summary": "**Status: Fix confirmed complete.**\n\n**Root cause:** In `src/auth.ts`, `verifySession()` had the clock-skew tolerance applied backwards. The original guard:\n\n```ts\nif (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n```\n\nsubtracted the 60s skew allowance from every session's effective lifetime instead of extending it, so any session expiring within 60s of `now` (including a freshly signed one) was incorrectly rejected as expired.\n\n**Fix applied** (in `src/auth.ts`, not the stale `lib/auth.ts` copy which was reverted via `git restore lib/auth.ts`):\n\n```diff\n- if (session.expiresAt <= now + CLOCK_SKEW_MS) return null;\n+ if (session.expiresAt + CLOCK_SKEW_MS <= now) return null;\n```\n\nThis correctly rejects only when the session's expiry plus the skew tolerance has passed relative to `now`.\n\n**Verification:** `pnpm test` output:\n```\n✓ test/auth.test.ts (3 tests) 11ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n```\nAll three tests (accepts fresh session, rejects expired session, rejects tampered signature) pass.\n\n**Net diff for the PR:** one line changed in `src/auth.ts` only. `test/auth.test.ts` is unchanged from its original committed state (the proposed boundary test for \"expires exactly at now\" was discussed but explicitly reverted/skipped for a separate PR — not included here). `lib/auth.ts` was untouched/reverted and is unrelated dead code not imported by anything.\n\nReady to open the PR with just the `src/auth.ts` one-liner."
+        }
+      }
+    }
+  ]
+}
