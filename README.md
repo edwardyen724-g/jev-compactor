@@ -46,7 +46,7 @@ stated only in the first turns and all needed for the final answer.
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
     A["agent history<br/>(N messages)"] --> B["1 · normalize<br/>OpenAI · Anthropic · LangChain · plain"]
     B --> C["2 · pre-pass, in code<br/>pin system / recent / goal paths / code<br/>dedup · regex foreman"]
     C --> D["3 · skeleton state<br/>whole conversation, abridged to ≤ 20k tokens"]
