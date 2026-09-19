@@ -306,19 +306,6 @@ with `jev-1.13.0`; metrics, raw results and reproduce commands:
 A step-by-step walkthrough:
 [docs/TUTORIAL.md](https://github.com/edwardyen724-g/jev-compactor/blob/main/docs/TUTORIAL.md).
 
-## Prior art
-
-[tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction) (MIT,
-2026-09-17) established Jev-scored verbatim compaction for Claude Code transcripts a day before this
-project existed: tool pairs as candidates, a whole-conversation state with staged abridging, question
-batches under the request limit, nothing kept ever rewritten. This project's skeleton-state design
-converged on that shape after a per-window design failed the "superseded by a later message" test.
-What is different here: framework-agnostic message shapes and adapters (OpenAI, Anthropic,
-LangChain, plain, MCP) instead of one editor's transcript format; text messages as candidates with
-deterministic pins in code (system, recency, goal paths, code) in addition to tool pairs; the Foreman
-safety questions in the same Jev pass with a regex floor and an escrow hook; and a report format
-built to be consumed by tooling. If you live in Claude Code, their plugin is the shorter path.
-
 ## Data leaves your machine
 
 When compaction runs, an abridged copy of the conversation — the goal and an excerpt of every

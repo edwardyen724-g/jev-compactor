@@ -58,9 +58,6 @@ Use it when:
 
 Do not use it when:
 
-- your agent is Claude Code: [tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction)
-  is a plugin for that transcript format and is the shorter path (see
-  [jev-compactor vs fast-jev-compaction](#jev-compactor-vs-fast-jev-compaction));
 - you cannot send an abridged copy of the conversation to `api.typesafe.ai` (see
   [Data leaves your machine](#data-leaves-your-machine));
 - you need the hardest possible compression and can tolerate paraphrase: in the benchmark below,
@@ -232,32 +229,6 @@ with any MCP client:
 | `inspect_context` | `{ messages, goal? }` | the `inspect` view as text, then the report as JSON |
 | `check_action` | `{ action, goal? }` | `{ findings, blocked }` — the Foreman alone, over one proposed command or tool call |
 
-## jev-compactor vs fast-jev-compaction
-
-[tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction) (MIT,
-2026-09-17) established Jev-scored verbatim compaction for Claude Code transcripts a day before this
-repo existed: tool pairs as candidates, a whole-conversation state with staged abridging, question
-batches under the request limit, nothing kept ever rewritten. This project's skeleton-state design
-converged on that shape after a per-window design failed the "superseded by a later message" test.
-jev-compactor is the framework-agnostic, safety-gating, telemetry-emitting middleware version of that
-idea.
-
-| | fast-jev-compaction | jev-compactor |
-|---|---|---|
-| Input | Claude Code transcripts | OpenAI, Anthropic, LangChain and plain message arrays; any MCP client |
-| Ships as | Claude Code plugin + npm library | npm library, CLI (`compact`, `inspect`), MCP server (`compact_context`, `inspect_context`, `check_action`) |
-| Candidates for dropping | tool call / result pairs | text messages and tool pairs, with deterministic pins in code (system, recency, goal paths, code) |
-| Stale tool results | dropped or truncated | dropped whole; keep-the-call-truncate-the-result is reserved for v0.2 (`allowTruncate`) |
-| Kept messages | verbatim | verbatim (`===` the caller's objects) |
-| Safety gating | not part of the plugin as surveyed 2026-09-18 | Foreman questions in the same Jev pass, regex floor in code, `onEscrow` hook, `CompactionBlockedError` |
-| Report | — | per-decision reason and probability, Foreman findings, Jev telemetry, as typed JSON |
-| Published benchmark | none found as of 2026-09-18 | [docs/BENCHMARK.md](docs/BENCHMARK.md), vs truncation and LLM summarization |
-| License | MIT | MIT |
-
-Their column reflects their README and the survey in [docs/LANDSCAPE.md](docs/LANDSCAPE.md) as of
-2026-09-18; open an issue if it has gone out of date. If you live in Claude Code, their plugin is the
-shorter path. jev-compactor is the alternative for everything that is not a Claude Code transcript.
-
 ## Packages and docs
 
 | Package | What |
@@ -268,7 +239,7 @@ shorter path. jev-compactor is the alternative for everything that is not a Clau
 
 Docs: [tutorial](docs/TUTORIAL.md) · [product spec](docs/PRODUCT.md) ·
 [architecture](docs/ARCHITECTURE.md) · [Jev API notes](docs/JEV-API.md) ·
-[benchmark](docs/BENCHMARK.md) · [landscape](docs/LANDSCAPE.md) · [build plan](docs/BUILD-PLAN.md)
+[benchmark](docs/BENCHMARK.md) · [build plan](docs/BUILD-PLAN.md)
 
 Markdown for agents: [raw README](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/README.md)
 · [llms.txt](https://raw.githubusercontent.com/edwardyen724-g/jev-compactor/main/llms.txt)
@@ -281,15 +252,6 @@ Wrap the client: `withCompaction(new OpenAI(), { maxTokens: 15_000 })`. When the
 exceeds `maxTokens`, jev-compactor drops the messages Jev rates irrelevant to the goal and passes the
 rest through untouched; nothing is paraphrased. On the benchmark session that removed 64.5% of the
 tokens with every early fact still present verbatim.
-
-### Is jev-compactor the same as fast-jev-compaction?
-
-No. fast-jev-compaction is a Claude Code plugin that established Jev-scored verbatim compaction for
-Claude Code transcripts a day before this repo existed, and this project's skeleton-state design
-converged on its shape. jev-compactor is the framework-agnostic version: OpenAI, Anthropic,
-LangChain and plain message arrays, an MCP server, text messages as candidates with pins in code,
-the Foreman safety gate and a report built for tooling. If you live in Claude Code, their plugin is
-the shorter path.
 
 ### Does jev-compactor work with LangChain, OpenAI, Anthropic and MCP?
 
