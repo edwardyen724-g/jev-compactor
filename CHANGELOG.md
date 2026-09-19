@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added
 
+- Wiring feedback: `status(wrapped)` with live counters and the last report, `isWrapped()`, the
+  `verbose` option, `selfTest()`, `jev-compactor doctor`, and the MCP `self_test` tool.
+
 - `compact()`, `createCompactor()` and `withCompaction()` for OpenAI, Anthropic, LangChain and plain
   message arrays; kept messages are the caller's objects, tool pairs stay whole, every drop carries
   a reason and Jev's probability.

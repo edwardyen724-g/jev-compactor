@@ -11,21 +11,29 @@ import { createHash } from 'node:crypto';
 import { blockingFinding } from './decide.js';
 import { type Compactor, DEFAULTS, makeCompactor, skipCompaction } from './engine.js';
 import { actionIndices, groupUnits, normalize, pendingUnit } from './normalize.js';
+import { summaryLine } from './render.js';
 import {
   type AnyMessage,
   CompactionBlockedError,
+  type CompactionReport,
   type CompactionResult,
   type CompactOptions,
   type ForemanFinding,
   type ResolvedOptions,
+  type SkipReason,
   UnsupportedTargetError,
   type WithCompactionOptions,
+  type WrapperShape,
+  type WrapperStatus,
 } from './types.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: a wrapped method must accept whatever the caller passes.
 type AnyFn = (...args: any[]) => unknown;
 
-type Shape = 'function' | 'openai' | 'anthropic' | 'langchain';
+type Shape = WrapperShape;
+
+/** The property under which a wrapper exposes its `WrapperStatus`; read it with `status()`. */
+export const STATUS: unique symbol = Symbol.for('jev-compactor.status');
 
 const UNSUPPORTED_MESSAGE =
   'withCompaction: unsupported target. Expected one of: a function (messages, ...rest); ' +
@@ -98,17 +106,51 @@ function blockedBy<M extends AnyMessage>(
   );
 }
 
-/** One per wrapper: runs the compactor and keeps the per-conversation cooldown counters. */
+/**
+ * One per wrapper: runs the compactor, keeps the per-conversation cooldown counters, counts what
+ * happened to every call (read through `status()`), and logs one line per call when `verbose`.
+ */
 class Gate {
   /** Conversation key → calls left to skip; an entry is removed once it reaches zero. */
   private readonly cooling = new Map<string, number>();
+  private calls = 0;
+  private compactions = 0;
+  private blocked = 0;
+  private readonly skipped: Record<SkipReason, number> = {
+    below_threshold: 0,
+    cooldown: 0,
+    nothing_to_judge: 0,
+    jev_unavailable: 0,
+  };
+  private lastReport: CompactionReport | undefined;
 
   constructor(
     private readonly compactor: Compactor,
     private readonly cooldownTurns: number,
+    private readonly shape: Shape,
+    private readonly log: ((line: string) => void) | undefined,
   ) {}
 
+  status(): WrapperStatus {
+    const opts = this.compactor.options;
+    const status: WrapperStatus = {
+      wrapped: true,
+      shape: this.shape,
+      trigger: opts.trigger,
+      maxTokens: opts.maxTokens,
+      safetyGating: opts.safetyGating,
+      cooldownTurns: this.cooldownTurns,
+      calls: this.calls,
+      compactions: this.compactions,
+      skipped: { ...this.skipped },
+      blocked: this.blocked,
+    };
+    if (this.lastReport !== undefined) status.lastReport = this.lastReport;
+    return status;
+  }
+
   async run<M extends AnyMessage>(messages: readonly M[]): Promise<CompactionResult<M>> {
+    this.calls++;
     const key = conversationKey(messages);
     const left = this.cooling.get(key) ?? 0;
     if (left > 0) {
@@ -117,10 +159,10 @@ class Gate {
       // Jev is skipped; the regex floor and safety gating are not.
       return this.gate(
         messages,
-        await skipCompaction(messages, this.compactor.options, 'cooldown'),
+        this.record(await skipCompaction(messages, this.compactor.options, 'cooldown')),
       );
     }
-    const result = await this.compactor.compact(messages);
+    const result = this.record(await this.compactor.compact(messages));
     // A run that got past the trigger check arms the cooldown — a fail-open attempt included, so an
     // unreachable Jev is not retried (with its timeouts) on every turn. A blocked run does not: the
     // model was not called, and a retry of the same history must be gated again.
@@ -130,6 +172,16 @@ class Gate {
     return this.gate(messages, result);
   }
 
+  /** Counts the outcome, remembers the report, logs the summary line. */
+  private record<M extends AnyMessage>(result: CompactionResult<M>): CompactionResult<M> {
+    const { report } = result;
+    this.lastReport = report;
+    if (report.skipped !== undefined) this.skipped[report.skipped]++;
+    else if (result.compacted) this.compactions++;
+    this.log?.(`jev-compactor: ${summaryLine(result)}`);
+    return result;
+  }
+
   private gate<M extends AnyMessage>(
     messages: readonly M[],
     result: CompactionResult<M>,
@@ -137,6 +189,7 @@ class Gate {
     if (!result.blocked) return result;
     const finding = blockedBy(messages, result, this.compactor.options);
     if (finding === undefined) return result;
+    this.blocked++;
     const evidence = finding.evidence === undefined ? '' : `: ${finding.evidence}`;
     throw new CompactionBlockedError(
       `Compaction blocked by ${finding.kind} finding (${finding.source}${evidence})`,
@@ -285,11 +338,14 @@ function proxyAlong(
   obj: object,
   path: readonly string[],
   leaf: (method: AnyFn, owner: object) => AnyFn,
+  statusOf?: () => WrapperStatus,
 ): object {
   const [head, ...tail] = path;
   const cache = new Map<PropertyKey, { source: unknown; value: unknown }>();
   return new Proxy(obj, {
     get(target, prop) {
+      // Only the outermost proxy answers for the wrapper.
+      if (statusOf !== undefined && prop === STATUS) return statusOf();
       const source: unknown = Reflect.get(target, prop, target);
       if (isLocked(target, prop)) return source;
       const hit = cache.get(prop);
@@ -334,28 +390,74 @@ export function withCompaction<T>(target: T, options?: WithCompactionOptions): T
   if (shape === undefined) throw new UnsupportedTargetError(UNSUPPORTED_MESSAGE);
 
   const all: WithCompactionOptions = options ?? {};
-  const { cooldownTurns, ...compactOptions } = all;
+  const { cooldownTurns, verbose, ...compactOptions } = all;
   const turns = Math.max(0, Math.floor(cooldownTurns ?? DEFAULTS.cooldownTurns));
+  const log =
+    verbose === true
+      ? (line: string): void => {
+          process.stderr.write(`${line}\n`);
+        }
+      : typeof verbose === 'function'
+        ? verbose
+        : undefined;
   const compactor = makeCompactor(withShapeFormat(compactOptions, shape), 'wrap');
-  const gate = new Gate(compactor, turns);
+  const gate = new Gate(compactor, turns, shape, log);
+  const statusOf = (): WrapperStatus => gate.status();
 
   switch (shape) {
-    case 'function':
-      return wrapFunction(target as unknown as AnyFn, gate) as unknown as T;
+    case 'function': {
+      const wrapped = wrapFunction(target as unknown as AnyFn, gate);
+      Object.defineProperty(wrapped, STATUS, {
+        get: statusOf,
+        enumerable: false,
+        configurable: true,
+      });
+      return wrapped as unknown as T;
+    }
     case 'openai':
       assertInterceptable(target as unknown as object, OPENAI_PATH);
-      return proxyAlong(target as unknown as object, OPENAI_PATH, (create, owner) =>
-        wrapCreate(create, owner, gate, 'openai'),
+      return proxyAlong(
+        target as unknown as object,
+        OPENAI_PATH,
+        (create, owner) => wrapCreate(create, owner, gate, 'openai'),
+        statusOf,
       ) as T;
     case 'anthropic':
       assertInterceptable(target as unknown as object, ANTHROPIC_PATH);
-      return proxyAlong(target as unknown as object, ANTHROPIC_PATH, (create, owner) =>
-        wrapCreate(create, owner, gate, 'anthropic'),
+      return proxyAlong(
+        target as unknown as object,
+        ANTHROPIC_PATH,
+        (create, owner) => wrapCreate(create, owner, gate, 'anthropic'),
+        statusOf,
       ) as T;
     case 'langchain':
       assertInterceptable(target as unknown as object, LANGCHAIN_PATH);
-      return proxyAlong(target as unknown as object, LANGCHAIN_PATH, (invoke, owner) =>
-        wrapInvoke(invoke, owner, gate),
+      return proxyAlong(
+        target as unknown as object,
+        LANGCHAIN_PATH,
+        (invoke, owner) => wrapInvoke(invoke, owner, gate),
+        statusOf,
       ) as T;
   }
+}
+
+// ───────────────────────────── is it wired in? ─────────────────────────────
+
+/**
+ * The `WrapperStatus` of something returned by `withCompaction`, or `undefined` for anything else
+ * (the unwrapped client, a plain function, `null`). Counters are live: read again after a call.
+ */
+export function status(target: unknown): WrapperStatus | undefined {
+  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) {
+    return undefined;
+  }
+  const value: unknown = (target as Record<PropertyKey, unknown>)[STATUS];
+  return isObject(value) && value.wrapped === true
+    ? (value as unknown as WrapperStatus)
+    : undefined;
+}
+
+/** True when `target` came out of `withCompaction`. */
+export function isWrapped(target: unknown): boolean {
+  return status(target) !== undefined;
 }

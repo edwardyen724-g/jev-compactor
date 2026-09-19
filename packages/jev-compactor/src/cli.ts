@@ -1,8 +1,9 @@
 /**
  * `jev-compactor` CLI. `compact <file>` writes the compacted message array (the caller's original
  * objects, JSON) to stdout or `--out` with a one-line summary on stderr; `inspect <file>` renders
- * every unit's decision, the Foreman findings and the corrective prompt. Exit 0, 2 when the run is
- * blocked by safety gating, 1 on any error with a message that never contains the API key.
+ * every unit's decision, the Foreman findings and the corrective prompt; `doctor` checks the key,
+ * the Jev API and one end-to-end compaction. Exit 0, 2 when the run is blocked by safety gating,
+ * 1 on any error (or a failed doctor check) with a message that never contains the API key.
  *
  * The bin is the bundled `dist/cli.mjs` (tsdown adds the shebang); this module runs `main()` at
  * load, so nothing else imports it.
@@ -10,8 +11,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { compact } from './engine.js';
+import { compact, resolveOptions, selfTest } from './engine.js';
 import { loadEnvLocal } from './env.js';
+import { createClient } from './jev.js';
 import {
   describeError,
   packageVersion,
@@ -26,7 +28,7 @@ export const EXIT_OK = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_BLOCKED = 2;
 
-const COMMANDS = ['compact', 'inspect'] as const;
+const COMMANDS = ['compact', 'inspect', 'doctor'] as const;
 type Command = (typeof COMMANDS)[number];
 
 const FORMATS: ReadonlySet<string> = new Set(['auto', 'openai', 'anthropic', 'langchain', 'plain']);
@@ -34,6 +36,7 @@ const FORMATS: ReadonlySet<string> = new Set(['auto', 'openai', 'anthropic', 'la
 export const USAGE = `Usage:
   jev-compactor compact <file> [options]   write the compacted messages (JSON) to stdout or --out
   jev-compactor inspect <file> [options]   show every unit's decision, the Foreman findings and the corrective prompt
+  jev-compactor doctor                     check the API key, the Jev API and one end-to-end compaction
 
   <file> is a JSON array of messages or {"messages": [...]}; "-" reads stdin.
 
@@ -165,7 +168,8 @@ function jsonOf(value: unknown): string {
 
 /** Runs the CLI with `argv` (without the node and script paths) and returns the exit code. */
 export async function run(argv: readonly string[]): Promise<number> {
-  loadEnvLocal();
+  const keyFromEnvironment = (process.env.TYPESAFE_API_KEY ?? '').trim() !== '';
+  const envFile = loadEnvLocal();
 
   let values: {
     goal?: string;
@@ -201,6 +205,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   const [command, file, ...rest] = positionals;
   if (command === undefined) throw new CliError('missing command', true);
   if (!isCommand(command)) throw new CliError(`unknown command '${command}'`, true);
+  if (command === 'doctor') {
+    if (file !== undefined) throw new CliError(`unexpected argument '${file}'`, true);
+    return doctor(keyFromEnvironment, envFile);
+  }
   if (file === undefined) throw new CliError(`${command}: missing <file>`, true);
   if (rest.length > 0) throw new CliError(`unexpected argument '${rest[0] ?? ''}'`, true);
 
@@ -243,6 +251,61 @@ export async function run(argv: readonly string[]): Promise<number> {
   }
 
   return result.blocked ? EXIT_BLOCKED : EXIT_OK;
+}
+
+// ───────────────────────────── doctor ─────────────────────────────
+
+const OK = '\u2713';
+const BAD = '\u2717';
+
+/**
+ * Three checks, each printed as one line: the key is set (and where it came from), the Jev API
+ * answers `GET /v1/models`, and `selfTest()` compacts the built-in history with its `rm -rf`
+ * flagged by the regex floor and by Jev. Exit 1 on the first failure; every message is redacted.
+ */
+async function doctor(keyFromEnvironment: boolean, envFile: string | undefined): Promise<number> {
+  const lines: string[] = [];
+  const hasKey = (process.env.TYPESAFE_API_KEY ?? '').trim() !== '';
+  if (hasKey) {
+    const source = keyFromEnvironment ? 'the environment' : (envFile ?? 'the environment');
+    lines.push(`${OK} API key      TYPESAFE_API_KEY read from ${source}`);
+  } else {
+    lines.push(
+      `${BAD} API key      TYPESAFE_API_KEY is not set: export it, or put it in .env.local next to your package.json`,
+    );
+  }
+  let failed = !hasKey;
+  if (!failed) {
+    const started = performance.now();
+    try {
+      const models = await createClient(resolveOptions({}, 'compact')).models.list();
+      const names = models.map((m) => m.name).join(', ');
+      lines.push(
+        `${OK} Jev API      reachable in ${Math.round(performance.now() - started)} ms · models: ${names}`,
+      );
+    } catch (error: unknown) {
+      failed = true;
+      lines.push(`${BAD} Jev API      ${redact(describeError(error))}`);
+    }
+  }
+  if (!failed) {
+    const test = await selfTest();
+    if (test.ok) {
+      lines.push(
+        `${OK} Compaction   ${test.model ?? 'jev'} answered in ${test.latencyMs ?? 0} ms · ${test.messagesBefore} → ${test.messagesAfter} messages · the built-in rm -rf was flagged by the regex floor and by Jev`,
+      );
+    } else {
+      failed = true;
+      lines.push(`${BAD} Compaction   ${test.stage}: ${redact(test.error ?? 'unknown failure')}`);
+    }
+  }
+  lines.push(
+    failed
+      ? `Fix the ${BAD} line, then run \`jev-compactor doctor\` again.`
+      : 'All good. In code, call status(client) on the wrapped client to see calls, compactions and the last report; pass verbose: true to withCompaction to log one line per call.',
+  );
+  process.stdout.write(`${lines.join('\n')}\n`);
+  return failed ? EXIT_ERROR : EXIT_OK;
 }
 
 function main(): void {

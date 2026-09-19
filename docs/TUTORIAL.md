@@ -99,6 +99,47 @@ appended to `params.system`. A LangChain runnable's `invoke` is wrapped when its
 array or `{ messages }`. A plain function `(messages, ...rest) => …` is wrapped directly. After a
 compaction, the next `cooldownTurns` calls (default 1) skip Jev.
 
+## 4b. Confirm it is wired in
+
+Nothing changes visibly when the wrapper is idle: below `maxTokens` every call passes straight
+through. So check, once, from the outside and from the inside.
+
+```sh
+npx jev-compactor doctor
+```
+
+```
+✓ API key      TYPESAFE_API_KEY read from /Users/you/project/.env.local
+✓ Jev API      reachable in 212 ms · models: jev-latest, jev-preview
+✓ Compaction   jev-1.13.0 answered in 287 ms · 9 → 6 messages · the built-in rm -rf was flagged by the regex floor and by Jev
+All good. …
+```
+
+A ✗ names the stage (key, Jev API, compaction) and what to do; the command exits 1 so it can sit
+in a start-up script or CI.
+
+```ts
+import { withCompaction, status } from 'jev-compactor';
+
+const openai = withCompaction(new OpenAI(), { maxTokens: 15_000, verbose: true });
+console.log(status(openai));
+// { wrapped: true, shape: 'openai', trigger: 'auto', maxTokens: 15000, calls: 0, compactions: 0, … }
+```
+
+`status(x)` is `undefined` unless `x` came out of `withCompaction`, which catches the classic
+mistake of wrapping the client and then keeping the original. After each call the counters move:
+`calls` always, `skipped.below_threshold` while the history is small, `compactions` once it is not,
+`blocked` when the gate fired; `lastReport` is the full report of the latest call. With
+`verbose: true` the wrapper also prints one line per call to stderr:
+
+```
+jev-compactor: kept 35/35 messages · 5,541 → 5,541 tokens · skipped: below_threshold
+jev-compactor: kept 24/35 messages · 5,541 → 4,079 tokens · jev 235 ms · $0.0002
+```
+
+The first line is the wrapper saying "I saw the call, nothing to do yet"; the second is a
+compaction. If you never see the first line, the wrapper is not in the path.
+
 ## 5. Tune it
 
 | You want | Set |

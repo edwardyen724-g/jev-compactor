@@ -60,6 +60,44 @@ result merely quotes) are reported and flagged but do not block, and thrashing o
 block — they inject the corrective prompt. A blocked call never arms the cooldown, so a retry is
 gated again.
 
+## Is it wired in?
+
+Three ways to know, from cheapest to most thorough:
+
+```sh
+npx jev-compactor doctor
+```
+
+```
+✓ API key      TYPESAFE_API_KEY read from /path/to/your/.env.local
+✓ Jev API      reachable in 212 ms · models: jev-latest, jev-preview
+✓ Compaction   jev-1.13.0 answered in 287 ms · 9 → 6 messages · the built-in rm -rf was flagged by the regex floor and by Jev
+All good. In code, call status(client) on the wrapped client to see calls, compactions and the last report; pass verbose: true to withCompaction to log one line per call.
+```
+
+`doctor` checks the key (and says where it came from), that the Jev API answers, and that one
+compaction round-trips end to end over a built-in history. It exits 1 at the first ✗ with the fix.
+
+```ts
+import { withCompaction, status } from 'jev-compactor';
+
+const openai = withCompaction(new OpenAI(), { maxTokens: 15_000, verbose: true });
+// stderr, every call:  jev-compactor: kept 35/35 messages · 5,541 → 5,541 tokens · skipped: below_threshold
+//                      jev-compactor: kept 24/35 messages · 5,541 → 4,079 tokens · jev 235 ms · $0.0002
+
+status(openai);
+// { wrapped: true, shape: 'openai', trigger: 'auto', maxTokens: 15000, safetyGating: false,
+//   cooldownTurns: 1, calls: 12, compactions: 2, skipped: { below_threshold: 9, cooldown: 1, … },
+//   blocked: 0, lastReport: { … } }
+```
+
+`status(x)` is `undefined` for anything that did not come out of `withCompaction` — so
+`status(client) === undefined` after wrapping means you are still holding the unwrapped client.
+`verbose` takes a function instead of `true` to route the lines to your logger. `selfTest()` is
+what `doctor` runs, as a function: `{ ok, stage: 'key' | 'jev' | 'pipeline' | 'ok', model,
+latencyMs, messagesBefore, messagesAfter, destructiveFlagged: { pattern, jev }, error? }`. The MCP
+server exposes the same check as the `self_test` tool.
+
 ## `compact()`
 
 ```ts
@@ -179,6 +217,7 @@ foreman
 | `compact_context` | `{ messages, goal?, maxTokens?, safetyGating?, format? }` | `{ messages, report, blocked, systemAddendum? }` |
 | `inspect_context` | `{ messages, goal? }` | the `inspect` view as text, then the report as JSON |
 | `check_action` | `{ action, goal? }` | `{ findings, blocked }` — the Foreman alone, over one proposed command or tool call |
+| `self_test` | `{}` | `{ ok, stage, model, latencyMs, … }` — one end-to-end compaction over a built-in history; call it once after configuring the server |
 
 Errors come back as `isError` results, never as a dropped connection. This is also the bridge for
 non-JavaScript agents (CrewAI, custom loops): send the history, get the kept subset back.
@@ -225,6 +264,7 @@ Every field of `CompactOptions` (`withCompaction` also takes `cooldownTurns`):
 | `signal` | — | Aborts in-flight Jev requests; a cancelled `compact()` rejects with the abort error (never fails open or closed) and a wrapped target is not called. |
 | `onReport` | — | `(report) => void`, called on every run, skipped ones included. |
 | `onEscrow` | — | `(finding, result) => 'approve' \| 'block'` (may be async), called with the finding about the pending action when `safetyGating` blocks. A hook that throws counts as `'block'`. |
+| `verbose` | `false` | `withCompaction` only: log one line per wrapped call (pass-through, compacted, skipped, blocked) to stderr, or to the given `(line) => void`. |
 | `cooldownTurns` | `1` | `withCompaction` only: calls of the same conversation (keyed on its first user message) that skip Jev after a run — a fail-open attempt included, so an unreachable Jev is not retried every turn. A blocked call never arms it, and skipped calls still run the regex floor and the gate. |
 
 ## The report

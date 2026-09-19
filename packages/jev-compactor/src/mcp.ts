@@ -12,7 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { compact } from './engine.js';
+import { compact, selfTest } from './engine.js';
 import { loadEnvLocal } from './env.js';
 import { describeError, packageVersion, redact, redactReport, renderInspect } from './render.js';
 import type { AnyMessage, CompactOptions } from './types.js';
@@ -147,6 +147,24 @@ export function createServer(): McpServer {
         // A fail-open verdict came from the regex floor alone; say so rather than pass it off as Jev's.
         if (result.report.skipped !== undefined) out.skipped = result.report.skipped;
         if (result.report.error !== undefined) out.error = redact(result.report.error);
+        return jsonResult(out);
+      }),
+  );
+
+  server.registerTool(
+    'self_test',
+    {
+      title: 'Self test',
+      description:
+        'Proves the setup end to end: runs one compaction over a built-in history against the Jev API and reports the first stage that failed (key, jev, pipeline) or ok, with the model, latency and whether the built-in rm -rf was flagged. Call it once after configuring the server.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    () =>
+      guarded(async () => {
+        const result = await selfTest();
+        const out: Record<string, unknown> = { ...result };
+        if (result.error !== undefined) out.error = redact(result.error);
         return jsonResult(out);
       }),
   );

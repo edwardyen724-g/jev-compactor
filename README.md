@@ -253,6 +253,14 @@ exceeds `maxTokens`, jev-compactor drops the messages Jev rates irrelevant to th
 rest through untouched; nothing is paraphrased. On the benchmark session that removed 64.5% of the
 tokens with every early fact still present verbatim.
 
+### How do I know jev-compactor is actually working?
+
+Run `npx jev-compactor doctor`: it checks the API key, that the Jev API answers, and that one
+compaction round-trips end to end, and exits 1 at the first failure with the fix. In code,
+`status(client)` on a wrapped client returns live counters (calls, compactions, skipped by reason,
+blocked, the last report) and is `undefined` if you are still holding the unwrapped client;
+`verbose: true` logs one line per call. The MCP server has the same check as `self_test`.
+
 ### Does jev-compactor work with LangChain, OpenAI, Anthropic and MCP?
 
 Yes. `withCompaction` detects an OpenAI-style client (`chat.completions.create`), an

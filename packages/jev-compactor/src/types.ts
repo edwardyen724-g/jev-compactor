@@ -224,6 +224,51 @@ export interface CompactOptions {
 export interface WithCompactionOptions extends CompactOptions {
   /** Minimum calls between two compactions of the same target. Default 1. */
   cooldownTurns?: number;
+  /**
+   * Log one line per wrapped call — pass-through, compacted, skipped, blocked — to stderr, or to
+   * the given function. The cheapest way to see that the wrapper is live. Default false.
+   */
+  verbose?: boolean | ((line: string) => void);
+}
+
+export type WrapperShape = 'function' | 'openai' | 'anthropic' | 'langchain';
+
+/** What a wrapper has done so far. Read it with `status(wrapped)`; `undefined` means not wrapped. */
+export interface WrapperStatus {
+  wrapped: true;
+  shape: WrapperShape;
+  trigger: 'auto' | 'always';
+  maxTokens: number;
+  safetyGating: boolean;
+  cooldownTurns: number;
+  /** Wrapped calls that carried a messages array. */
+  calls: number;
+  /** Calls where Jev ran and the history was compacted. */
+  compactions: number;
+  /** Calls that ran only the regex floor, by reason (`jev_unavailable` = failed open). */
+  skipped: Record<SkipReason, number>;
+  /** Calls that threw `CompactionBlockedError`. */
+  blocked: number;
+  /** The report of the most recent call. */
+  lastReport?: CompactionReport;
+}
+
+export type SelfTestStage = 'key' | 'jev' | 'pipeline' | 'ok';
+
+/** Result of `selfTest()`: an end-to-end run over a built-in history. */
+export interface SelfTestResult {
+  ok: boolean;
+  /** The first stage that failed: no key, Jev unreachable, pipeline did not flag the built-in `rm -rf`; or `ok`. */
+  stage: SelfTestStage;
+  model?: string;
+  latencyMs?: number;
+  requestIds?: string[];
+  messagesBefore: number;
+  messagesAfter: number;
+  /** Whether the built-in `rm -rf` proposal was flagged by the regex floor and by Jev. */
+  destructiveFlagged: { pattern: boolean; jev: boolean };
+  /** Redaction is the caller's job (the CLI and MCP server do it). */
+  error?: string;
 }
 
 /** Fully-resolved options with every default applied. Internal. */

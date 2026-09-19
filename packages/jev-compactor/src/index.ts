@@ -22,4 +22,4 @@ export { DEFAULT_PATTERNS, prepass, scanPatterns } from './prepass.js';
 export { buildSkeleton, SKELETON_NOTE } from './skeleton.js';
 export { CHARS_PER_TOKEN, estimateTokens, messagesTokens, messageTokens } from './tokens.js';
 export * from './types.js';
-export { withCompaction } from './with-compaction.js';
+export { isWrapped, STATUS, status, withCompaction } from './with-compaction.js';
